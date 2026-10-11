@@ -114,6 +114,18 @@ describe("Institutional Auth & Identity Foundation", () => {
       expect(result.error).toContain("No active OTP challenge");
     });
 
+    it("accepts the deterministic code without shared challenge storage in explicit mock mode", async () => {
+      const originalAuthMode = process.env.AUTH_MODE;
+      process.env.AUTH_MODE = "mock";
+      try {
+        const result = await verifyOtpChallenge("STU2026003", "123456");
+        expect(result.valid).toBe(true);
+      } finally {
+        if (originalAuthMode === undefined) delete process.env.AUTH_MODE;
+        else process.env.AUTH_MODE = originalAuthMode;
+      }
+    });
+
     it("rejects the dummy OTP after the challenge expires", async () => {
       vi.useFakeTimers();
       try {

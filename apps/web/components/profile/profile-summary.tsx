@@ -5,6 +5,7 @@ import { useCampusAuth } from "../auth/auth-guard";
 import { IdentityCard } from "../auth/identity-card";
 import { LogOut, ArrowLeft, KeyRound } from "lucide-react";
 import Link from "next/link";
+import Image from "next/image";
 
 export function ProfileSummary() {
   const { user, logout, switchDemoUser } = useCampusAuth();
@@ -15,13 +16,24 @@ export function ProfileSummary() {
     <div className="max-w-2xl mx-auto space-y-6">
       {/* Top Header */}
       <div className="flex items-center justify-between border-b border-zinc-800 pb-5">
-        <div>
-          <h1 className="text-2xl font-bold tracking-tight text-zinc-100">
-            Institutional Profile
-          </h1>
-          <p className="text-xs text-zinc-400 mt-1">
-            Canonical identity verified via university registrar directory.
-          </p>
+        <div className="flex items-center gap-3.5">
+          <div className="w-11 h-11 rounded-xl overflow-hidden bg-zinc-950 border border-zinc-800 shadow-sm shrink-0">
+            <Image
+              src="/assets/campus_gram_icon.svg"
+              alt="CampusGram"
+              width={44}
+              height={44}
+              className="w-full h-full object-cover"
+            />
+          </div>
+          <div>
+            <h1 className="text-2xl font-bold tracking-tight text-zinc-100">
+              Institutional Profile
+            </h1>
+            <p className="text-xs text-zinc-400 mt-0.5">
+              Canonical identity verified via university registrar directory.
+            </p>
+          </div>
         </div>
 
         <Link

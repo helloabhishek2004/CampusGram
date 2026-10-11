@@ -1,0 +1,27 @@
+{
+  "name": "CampusGram — Smart Campus",
+  "short_name": "CampusGram",
+  "description": "Next-generation Smart Campus Information, Services & Student Platform",
+  "start_url": "/home",
+  "display": "standalone",
+  "background_color": "#09090b",
+  "theme_color": "#09090b",
+  "icons": [
+    {
+      "src": "/assets/campus_gram_icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/campus_gram_icon.png",
+      "sizes": "512x512",
+      "type": "image/png"
+    },
+    {
+      "src": "/assets/campus_gram.ico",
+      "sizes": "64x64 32x32 24x24 16x16",
+      "type": "image/x-icon"
+    }
+  ]
+}

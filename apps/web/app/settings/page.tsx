@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState } from "react";
+import Image from "next/image";
 import { AppShell } from "@/components/layout/app-shell";
 import { useCampusAuth } from "@/components/auth/auth-guard";
 import { useTheme } from "@/components/theme/theme-context";
@@ -42,12 +43,25 @@ export default function SettingsPage() {
       <div className="max-w-2xl mx-auto space-y-6">
         {/* Header */}
         <header className="border-b border-border pb-5">
-          <h1 className="text-2xl font-bold tracking-tight text-foreground">
-            Settings & Preferences
-          </h1>
-          <p className="text-xs text-muted-foreground mt-1">
-            Manage application appearance, alerts, and institutional data preferences.
-          </p>
+          <div className="flex items-center gap-3.5">
+            <div className="w-11 h-11 rounded-xl overflow-hidden bg-zinc-950 border border-border shadow-sm shrink-0">
+              <Image
+                src="/assets/campus_gram_icon.svg"
+                alt="CampusGram"
+                width={44}
+                height={44}
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div>
+              <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                Settings & Preferences
+              </h1>
+              <p className="text-xs text-muted-foreground mt-0.5">
+                Manage application appearance, alerts, and institutional data preferences.
+              </p>
+            </div>
+          </div>
         </header>
 
         {/* Section 1: Appearance */}

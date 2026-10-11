@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Home,
@@ -108,9 +109,13 @@ export function Sidebar() {
           {/* Logo Mark with Hover Switch Transformation */}
           <div className="relative w-8 h-8 rounded-lg bg-zinc-900 dark:bg-zinc-900 border border-zinc-700/80 dark:border-zinc-800 flex items-center justify-center font-mono font-bold text-xs text-zinc-100 shadow-sm shrink-0 overflow-hidden group-hover:border-zinc-500 dark:group-hover:border-zinc-600 transition-colors">
             {/* Normal State: CampusGram Mark */}
-            <span className="transition-all duration-200 group-hover:opacity-0 group-hover:scale-50">
-              CG
-            </span>
+            <Image
+              src="/assets/campus_gram_icon.svg"
+              alt="CampusGram"
+              width={32}
+              height={32}
+              className="w-full h-full object-cover transition-all duration-200 group-hover:opacity-0 group-hover:scale-50"
+            />
 
             {/* Hovered State: macOS Switch */}
             <div className="absolute inset-0 flex items-center justify-center opacity-0 scale-75 group-hover:opacity-100 group-hover:scale-100 transition-all duration-200 text-zinc-100">

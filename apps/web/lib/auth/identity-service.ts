@@ -258,6 +258,14 @@ function applicationRole(role: InstitutionalLookupResponse["role"], tags: string
 async function ensureApplicationProfile(profile: InstitutionalLookupResponse): Promise<string> {
   if (process.env.NODE_ENV === "test") return profile.id;
 
+  const hasServerDatabase = Boolean(
+    process.env.NEXT_PUBLIC_SUPABASE_URL &&
+      process.env.SUPABASE_SERVICE_ROLE_KEY &&
+      !process.env.NEXT_PUBLIC_SUPABASE_URL.includes("placeholder") &&
+      !process.env.SUPABASE_SERVICE_ROLE_KEY.includes("placeholder"),
+  );
+  if (process.env.AUTH_MODE === "mock" && !hasServerDatabase) return profile.id;
+
   const admin = createServiceClient();
   const { data: directory, error: directoryError } = await admin
     .from("institutional_users")

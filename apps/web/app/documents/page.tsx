@@ -1,6 +1,7 @@
 "use client";
 
 import React, { useState, useEffect, useCallback } from "react";
+import Image from "next/image";
 import { AppShell } from "@/components/layout/app-shell";
 import { DocumentCard } from "@/components/documents/document-card";
 import { DocumentModal } from "@/components/documents/document-modal";
@@ -96,13 +97,24 @@ export default function DocumentsPage() {
         {/* Header */}
         <header className="border-b border-border pb-5">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-4">
-            <div>
-              <h1 className="text-2xl font-bold tracking-tight text-foreground">
-                Documents & Academic Records
-              </h1>
-              <p className="text-xs text-muted-foreground mt-1">
-                Access official university credentials, student certificates, and class notices.
-              </p>
+            <div className="flex items-center gap-3.5">
+              <div className="w-11 h-11 rounded-xl overflow-hidden bg-zinc-950 border border-border shadow-sm shrink-0">
+                <Image
+                  src="/assets/campus_gram_icon.svg"
+                  alt="CampusGram"
+                  width={44}
+                  height={44}
+                  className="w-full h-full object-cover"
+                />
+              </div>
+              <div>
+                <h1 className="text-2xl font-bold tracking-tight text-foreground">
+                  Documents & Academic Records
+                </h1>
+                <p className="text-xs text-muted-foreground mt-0.5">
+                  Access official university credentials, student certificates, and class notices.
+                </p>
+              </div>
             </div>
 
             <div className="flex items-center gap-3 self-start sm:self-auto">

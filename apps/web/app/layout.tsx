@@ -69,6 +69,16 @@ export const metadata: Metadata = {
       "max-snippet": -1,
     },
   },
+  icons: {
+    icon: [
+      { url: "/favicon.ico", sizes: "any" },
+      { url: "/assets/campus_gram.ico", sizes: "any" },
+      { url: "/assets/campus_gram_icon.svg", type: "image/svg+xml" },
+    ],
+    shortcut: "/favicon.ico",
+    apple: "/assets/campus_gram_icon.png",
+  },
+  manifest: "/manifest.json",
 };
 
 export default function RootLayout({

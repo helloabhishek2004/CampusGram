@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useCallback } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { format } from "date-fns";
 import { AppShell } from "@/components/layout/app-shell";
 import {
@@ -12,7 +13,6 @@ import {
   Button,
 } from "@smart-campus/ui";
 import {
-  ShieldAlert,
   ArrowLeft,
   Activity,
   Users,
@@ -71,8 +71,10 @@ export default function AdminDashboardPage() {
             >
               <ArrowLeft className="w-3.5 h-3.5" /> Back to Lost & Found
             </Link>
-            <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2">
-              <ShieldAlert className="w-6 h-6 text-foreground" />
+            <h1 className="text-2xl font-bold tracking-tight text-foreground flex items-center gap-2.5">
+              <div className="w-6 h-6 rounded-md overflow-hidden bg-zinc-950 border border-border shrink-0">
+                <Image src="/assets/campus_gram_icon.svg" alt="CampusGram" width={24} height={24} className="w-full h-full object-cover" />
+              </div>
               <span>Custody & Audit Desk</span>
             </h1>
             <p className="text-xs text-muted-foreground">

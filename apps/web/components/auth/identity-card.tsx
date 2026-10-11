@@ -1,4 +1,5 @@
 import React from "react";
+import Image from "next/image";
 import { InstitutionalLookupResponse, InstitutionalTag } from "@smart-campus/contracts";
 import { Avatar } from "../ui/avatar";
 import {
@@ -38,10 +39,14 @@ export function IdentityCard({
       <div className={cn("space-y-4 select-none", className)}>
         {/* Section 1: Core Identity */}
         <div className="rounded-xl border border-zinc-800 bg-zinc-900/60 p-5 space-y-4">
-          <div className="flex items-center gap-2 pb-3 border-b border-zinc-800/80">
+          <div className="flex items-center justify-between pb-3 border-b border-zinc-800/80">
             <span className="text-xs font-mono uppercase tracking-wider text-zinc-500 font-medium">
               Identity Record
             </span>
+            <div className="flex items-center gap-1.5 text-zinc-500 text-[11px] font-mono">
+              <Image src="/assets/campus_gram_icon.svg" alt="CampusGram" width={14} height={14} className="w-3.5 h-3.5 rounded-xs" />
+              <span>Campus Directory</span>
+            </div>
           </div>
 
           <div className="flex items-start gap-4">
@@ -182,12 +187,16 @@ export function IdentityCard({
     >
       {/* Top Banner */}
       <div className="flex flex-col items-center text-center pb-5 border-b border-zinc-800">
-        <Avatar
-          name={profile.fullName}
-          role={profile.role}
-          size="lg"
-          className="mb-3"
-        />
+        <div className="relative mb-3">
+          <Avatar
+            name={profile.fullName}
+            role={profile.role}
+            size="lg"
+          />
+          <div className="absolute -bottom-1 -right-1 w-5 h-5 rounded-full overflow-hidden bg-zinc-950 border border-zinc-700 shadow-xs flex items-center justify-center">
+            <Image src="/assets/campus_gram_icon.svg" alt="Verified" width={20} height={20} className="w-full h-full object-cover" />
+          </div>
+        </div>
 
         <h3 className="text-xl font-bold text-zinc-100 tracking-tight">
           {profile.fullName}

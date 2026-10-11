@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { usePathname } from "next/navigation";
 import {
   Search,
@@ -33,7 +34,16 @@ export function DesktopTopBar() {
     <header className="hidden md:flex min-h-14 items-center justify-between gap-4 px-4 sm:px-6 py-2.5 bg-background/90 backdrop-blur-xl border-b border-border sticky top-0 z-20 select-none transition-colors duration-200">
       {/* Left: Breadcrumb / Section context */}
       <div className="flex items-center gap-2.5 min-w-0">
-        <span className="w-2 h-2 rounded-full bg-muted-foreground" />
+        <div className="w-4 h-4 rounded-sm overflow-hidden bg-zinc-950 border border-zinc-800 shrink-0 shadow-xs">
+          <Image
+            src="/assets/campus_gram_icon.svg"
+            alt="CampusGram"
+            width={16}
+            height={16}
+            className="w-full h-full object-cover"
+          />
+        </div>
+        <span className="text-border text-xs font-mono">/</span>
         <span className="text-xs font-mono text-muted-foreground uppercase tracking-wider truncate font-medium">
           {getPageTitle()}
         </span>

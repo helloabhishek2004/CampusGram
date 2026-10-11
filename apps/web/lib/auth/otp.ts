@@ -169,6 +169,14 @@ export async function verifyOtpChallenge(
 
   const challenge = activeChallenges.get(normId);
   if (!challenge) {
+    if (
+      OTP_PROVIDER === "mock" &&
+      process.env.AUTH_MODE === "mock" &&
+      trimmedOtp === "123456"
+    ) {
+      return { valid: true };
+    }
+
     return {
       valid: false,
       error: "No active OTP challenge found or challenge expired. Please request a new OTP.",

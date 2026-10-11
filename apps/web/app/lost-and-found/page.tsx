@@ -2,6 +2,7 @@
 
 import React from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { AppShell } from "@/components/layout/app-shell";
 import { Card, CardHeader, CardTitle, CardContent, CardFooter } from "@smart-campus/ui";
 import {
@@ -22,6 +23,9 @@ export default function LostAndFoundDashboard() {
         <div className="flex flex-col md:flex-row md:items-center justify-between pb-4 border-b border-border gap-4">
           <div>
             <div className="flex items-center gap-2 mb-1.5">
+              <div className="w-4 h-4 rounded-sm overflow-hidden bg-zinc-950 border border-border shrink-0">
+                <Image src="/assets/campus_gram_icon.svg" alt="CampusGram" width={16} height={16} className="w-full h-full object-cover" />
+              </div>
               <span className="text-[10px] font-mono uppercase px-2 py-0.5 rounded border border-border bg-muted text-muted-foreground font-semibold tracking-wider">
                 Module 3
               </span>

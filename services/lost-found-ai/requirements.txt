@@ -3,7 +3,7 @@ uvicorn[standard]>=0.32.0
 pydantic>=2.10.0
 pytest>=8.3.0
 httpx>=0.28.0
-requests>=2.32.0
+requests>=2.32.3
 pillow>=11.0.0
 
 # Optional full ML inference dependencies (installed when running on GPU / dedicated container)

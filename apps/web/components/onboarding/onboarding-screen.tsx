@@ -5,6 +5,7 @@ import { useRouter } from "next/navigation";
 import { ArrowRight, ArrowLeft } from "lucide-react";
 import { CampusInfoVisual, ComplaintsVisual, LostFoundVisual } from "./onboarding-visuals";
 import { setOnboardingCompleted } from "../../lib/auth/client-session";
+import { CampusGramLogo } from "../layout/logo";
 import { cn } from "@smart-campus/utils";
 
 interface Step {
@@ -66,6 +67,9 @@ export function OnboardingScreen() {
 
   return (
     <div className="relative flex min-h-screen min-h-[100svh] flex-col overflow-hidden bg-zinc-50 px-5 pt-[max(1.5rem,env(safe-area-inset-top))] pb-[max(1.5rem,env(safe-area-inset-bottom))] text-zinc-900 dark:bg-zinc-950 dark:text-zinc-100 sm:px-10 sm:py-8 lg:px-14 lg:py-10">
+      <div className="absolute left-5 top-5 z-20 sm:left-10 sm:top-8 lg:left-14 lg:top-10">
+        <CampusGramLogo size="sm" />
+      </div>
 
       <button
         type="button"
