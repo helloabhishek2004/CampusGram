@@ -40,34 +40,41 @@ export async function GET(
       canViewAll,
     });
 
-    const complaint = complaints.find((c) => c.id === id);
+    // Keep ownership checks ahead of projection/history, even if a repository
+    // snapshot accidentally includes rows outside the requested viewer scope.
+    const visibleComplaints = complaints
+      .filter((c) => canViewAll || c.complainant_id === identity.userId)
+      .map(projectComplaintForApi);
+    const complaint = visibleComplaints.find((c) => c.id === id);
     if (!complaint) {
       return NextResponse.json(
         {
           success: false,
           error: {
             code: "NOT_FOUND",
-            message: `Complaint with ID ${id} not found`,
+            message: "Complaint not found.",
           },
         },
         { status: 404 },
       );
     }
 
-    const peerComplaints = complaints.filter(
+    // The public ID represents cluster + compatible incident scope, rather than
+    // the raw legacy cluster which may combine unrelated locations or issues.
+    const peerComplaints = visibleComplaints.filter(
       (c) => c.cluster_id === complaint.cluster_id && c.id !== complaint.id,
     );
 
     const response = {
-        success: true,
-        complaint: projectComplaintForApi(complaint),
-        peer_complaints: peerComplaints.map(projectComplaintForApi),
-        status_history: await getComplaintStatusHistory(complaint.id),
-      };
+      success: true,
+      complaint,
+      peer_complaints: peerComplaints,
+      status_history: await getComplaintStatusHistory(complaint.id),
+    };
     ComplaintRecordSchema.parse(response.complaint);
     response.peer_complaints.forEach((peer) => ComplaintRecordSchema.parse(peer));
     return NextResponse.json(ComplaintDetailResponseSchema.parse(response), { status: 200 });
-  } catch (error) {
+  } catch {
     return NextResponse.json(
       {
         success: false,
@@ -114,8 +121,10 @@ export async function PATCH(
       canManage: true,
       update: parsed.data,
     });
-    const response = { success: true, complaint: projectComplaintForApi(updated) };
-    ComplaintRecordSchema.parse(response.complaint);
+    const response = {
+      success: true,
+      complaint: ComplaintRecordSchema.parse(projectComplaintForApi(updated)),
+    };
     return NextResponse.json(response, { status: 200 });
   } catch (error) {
     if (error instanceof ComplaintLifecycleError) {
@@ -126,8 +135,17 @@ export async function PATCH(
           : error.code === "PERSISTENCE_FAILED"
             ? 500
             : 409;
+      // Do not forward exception text: even typed errors may wrap SQL details
+      // or private row contents. Keep known lifecycle failures actionable.
+      const messages: Record<ComplaintLifecycleError["code"], string> = {
+        FORBIDDEN: "Only authorized complaint staff may update a complaint.",
+        NOT_FOUND: "Complaint not found.",
+        INVALID_TRANSITION: "Cannot transition complaint to the requested status.",
+        VALIDATION_FAILED: "A response note is required when a complaint is resolved or rejected.",
+        PERSISTENCE_FAILED: "Unable to save the complaint update. Please try again.",
+      };
       return NextResponse.json(
-        { success: false, error: { code: error.code, message: error.message } },
+        { success: false, error: { code: error.code, message: messages[error.code] } },
         { status },
       );
     }

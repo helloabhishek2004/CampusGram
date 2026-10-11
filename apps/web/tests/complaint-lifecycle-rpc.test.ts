@@ -18,10 +18,10 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("../lib/supabase/server", () => ({
-  createApplicationClient: vi.fn(async () => ({
-    from: () => ({ select: () => ({ order: mocks.read }) }),
+  createServiceClient: vi.fn(() => ({
+    rpc: (name: string, args: unknown) => name === "read_complaints_phase1"
+      ? mocks.read(name, args) : mocks.rpc(name, args),
   })),
-  createServiceClient: vi.fn(() => ({ rpc: mocks.rpc })),
 }));
 vi.mock("../lib/auth/server-identity", () => ({
   resolveServerIdentity: mocks.resolveIdentity,
@@ -30,6 +30,7 @@ vi.mock("../lib/auth/server-identity", () => ({
 const staff = MOCK_INSTITUTIONAL_DIRECTORY.find((profile) => profile.tags.includes("HOD"))!;
 const current: ComplaintRecord = {
   id: "cmp-rpc-test",
+  complainant_id: MOCK_INSTITUTIONAL_DIRECTORY[0].id,
   text: "Broken water pump in hostel block",
   status: "under_review",
   attachments: [],
@@ -37,9 +38,13 @@ const current: ComplaintRecord = {
   is_emergency: false,
   similar_count: 1,
   response_note: "Inspection completed.",
-  created_at: "2026-10-11T00:00:00.000Z",
+  created_at: new Date().toISOString(),
 };
 const update = { status: "in_progress" as const, response_note: "note-failure-sentinel" };
+
+function readResult(records: ComplaintRecord[]) {
+  return { data: { complaints: records, counts: { total: records.length, normal: records.length, emergency: 0 } }, error: null };
+}
 
 const failures = [
   {
@@ -81,7 +86,7 @@ describe("configured Supabase complaint lifecycle RPC errors", () => {
     vi.stubEnv("NEXT_PUBLIC_SUPABASE_ANON_KEY", "fake-test-anon-key");
     vi.stubGlobal("fetch", mocks.fetch);
     mocks.fetch.mockRejectedValue(new Error("Unexpected network request"));
-    mocks.read.mockReset().mockResolvedValue({ data: [{ ...current }], error: null });
+    mocks.read.mockReset().mockResolvedValue(readResult([{ ...current }]));
     mocks.rpc.mockReset();
     mocks.resolveIdentity.mockResolvedValue({ userId: staff.id, profile: staff });
     _resetStoreForTesting([{ ...current }]);
@@ -116,7 +121,7 @@ describe("configured Supabase complaint lifecycle RPC errors", () => {
     expect(mocks.read).toHaveBeenCalledTimes(1);
     expect(mocks.fetch).not.toHaveBeenCalled();
     vi.stubEnv("NODE_ENV", "test");
-    expect((await getComplaints()).complaints).toEqual([current]);
+    expect((await getComplaints()).complaints).toMatchObject([current]);
     expect(_getStatusHistoryForTesting()).toEqual([]);
   }
 
@@ -151,8 +156,8 @@ describe("configured Supabase complaint lifecycle RPC errors", () => {
   it("still returns the authoritative updated complaint after a successful RPC", async () => {
     mocks.rpc.mockResolvedValue({ data: null, error: null });
     mocks.read
-      .mockResolvedValueOnce({ data: [{ ...current }], error: null })
-      .mockResolvedValueOnce({ data: [{ ...current, ...update, last_updated_by: staff.id }], error: null });
+      .mockResolvedValueOnce(readResult([{ ...current }]))
+      .mockResolvedValueOnce(readResult([{ ...current, ...update, last_updated_by: staff.id }]));
 
     const response = await patch();
     expect(response.status).toBe(200);

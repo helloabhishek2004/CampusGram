@@ -98,27 +98,27 @@ describe("CampusGram Complaint System Module", () => {
 
     it("classifies 1 to 4 complaints as normal, and 5th as emergency with group cascade", async () => {
       // 1st Complaint
-      const res1 = await createComplaint({ text: similarComplaints[0] });
+      const res1 = await createComplaint({ text: similarComplaints[0], complainant_id: "threshold-owner-1" });
       expect(res1.cluster.group_count).toBe(1);
       expect(res1.cluster.is_emergency).toBe(false);
       expect(res1.complaint.is_emergency).toBe(false);
 
       // 2nd Complaint
-      const res2 = await createComplaint({ text: similarComplaints[1] });
+      const res2 = await createComplaint({ text: similarComplaints[1], complainant_id: "threshold-owner-2" });
       expect(res2.cluster.cluster_id).toBe(res1.cluster.cluster_id);
       expect(res2.cluster.group_count).toBe(2);
       expect(res2.cluster.is_emergency).toBe(false);
       expect(res2.complaint.is_emergency).toBe(false);
 
       // 3rd Complaint
-      const res3 = await createComplaint({ text: similarComplaints[2] });
+      const res3 = await createComplaint({ text: similarComplaints[2], complainant_id: "threshold-owner-3" });
       expect(res3.cluster.cluster_id).toBe(res1.cluster.cluster_id);
       expect(res3.cluster.group_count).toBe(3);
       expect(res3.cluster.is_emergency).toBe(false);
       expect(res3.complaint.is_emergency).toBe(false);
 
       // 4th Complaint
-      const res4 = await createComplaint({ text: similarComplaints[3] });
+      const res4 = await createComplaint({ text: similarComplaints[3], complainant_id: "threshold-owner-4" });
       expect(res4.cluster.cluster_id).toBe(res1.cluster.cluster_id);
       expect(res4.cluster.group_count).toBe(4);
       expect(res4.cluster.is_emergency).toBe(false);
@@ -133,7 +133,7 @@ describe("CampusGram Complaint System Module", () => {
       expect(clusterMembersBefore5.every((c) => c.is_emergency === false)).toBe(true);
 
       // 5th Complaint arrives -> THRESHOLD CROSSED!
-      const res5 = await createComplaint({ text: similarComplaints[4] });
+      const res5 = await createComplaint({ text: similarComplaints[4], complainant_id: "threshold-owner-5" });
       expect(res5.cluster.cluster_id).toBe(res1.cluster.cluster_id);
       expect(res5.cluster.group_count).toBe(5);
       expect(res5.cluster.is_emergency).toBe(true);
@@ -311,8 +311,8 @@ describe("CampusGram Complaint System Module", () => {
         "Ground floor hostel corridor completely flooded with water",
       ];
 
-      for (const t of emergencyTexts) {
-        await createComplaint({ text: t, complainant_id: complaintOwnerId });
+      for (const [index, t] of emergencyTexts.entries()) {
+        await createComplaint({ text: t, complainant_id: index === 0 ? complaintOwnerId : `filter-owner-${index}` });
       }
 
       // Query view=all
@@ -324,7 +324,7 @@ describe("CampusGram Complaint System Module", () => {
       expect(jsonAll.counts.total).toBe(6);
       expect(jsonAll.counts.normal).toBe(1);
       expect(jsonAll.counts.emergency).toBe(5);
-      expect(jsonAll.complaints).toHaveLength(6);
+      expect(jsonAll.complaints).toHaveLength(2);
       expect(jsonAll.complaints.every((complaint: any) => complaint.complainant_id === undefined)).toBe(true);
 
       // Query view=normal
@@ -342,7 +342,8 @@ describe("CampusGram Complaint System Module", () => {
       });
       const resEmergency = await listComplaintsRoute(reqEmergency);
       const jsonEmergency = await resEmergency.json();
-      expect(jsonEmergency.complaints).toHaveLength(5);
+      expect(jsonEmergency.complaints).toHaveLength(1);
+      expect(jsonEmergency.complaints[0].similar_count).toBe(5);
       expect(jsonEmergency.complaints.every((c: any) => c.is_emergency === true)).toBe(true);
     });
 
@@ -455,14 +456,14 @@ describe("CampusGram Complaint System Module", () => {
       });
 
       // 5 complaints in emergency cluster
-      for (const t of [
+      for (const [index, t] of [
         "No water available in hostel washrooms",
         "Hostel washrooms have zero water supply",
         "Water outage across all hostel washrooms",
         "Washrooms in hostel have no running water",
         "Water supply completely cut in hostel washrooms",
-      ]) {
-        await createComplaint({ text: t, complainant_id: "student-water" });
+      ].entries()) {
+        await createComplaint({ text: t, complainant_id: `student-water-${index}` });
       }
 
       // Query complaints
@@ -477,29 +478,29 @@ describe("CampusGram Complaint System Module", () => {
   describe("5. Emergency Cluster Aggregation (Summary Grouping)", () => {
     it("aggregates multiple complaints sharing the same cluster_id into a single cluster group with count", async () => {
       // 5 water flood complaints -> Cluster A
-      for (const t of [
+      for (const [index, t] of [
         "Major water flood in hostel ground floor",
         "Water flooding all over hostel ground floor corridors",
         "Flooding with water in hostel ground floor rooms",
         "Hostel ground floor water flood problem",
         "Ground floor hostel corridor completely flooded with water",
-      ]) {
-        await createComplaint({ text: t });
+      ].entries()) {
+        await createComplaint({ text: t, complainant_id: `aggregation-owner-${index}` });
       }
 
       // 5 electricity blackout complaints -> Cluster B
-      for (const t of [
+      for (const [index, t] of [
         "Complete power cut in academic block C",
         "Power outage in academic block C classrooms",
         "No electricity power supply in academic block C",
         "Academic block C electricity outage blackout",
         "Blackout and no electrical power in academic block C",
-      ]) {
-        await createComplaint({ text: t });
+      ].entries()) {
+        await createComplaint({ text: t, complainant_id: `aggregation-owner-${index}` });
       }
 
       // 1 normal complaint -> Cluster C
-      await createComplaint({ text: "Cafeteria snack vending machine coin slot stuck" });
+      await createComplaint({ text: "Cafeteria snack vending machine coin slot stuck", complainant_id: "aggregation-owner-0" });
 
       const res = await getComplaints("emergency");
       expect(res.complaints).toHaveLength(10);

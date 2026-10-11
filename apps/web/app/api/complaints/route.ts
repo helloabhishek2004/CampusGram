@@ -10,6 +10,7 @@ import {
 import {
   createComplaint,
   getComplaints,
+  ComplaintSubmissionError,
 } from "../../../lib/complaints/complaint-repository";
 import { resolveServerIdentity } from "../../../lib/auth/server-identity";
 import { canManageComplaints } from "../../../lib/complaints/complaint-permissions";
@@ -66,8 +67,8 @@ export async function GET(req: NextRequest) {
     };
 
     return NextResponse.json(ComplaintListResponseSchema.parse(response), { status: 200 });
-  } catch (error) {
-    console.error("GET /api/complaints error:", error);
+  } catch {
+    console.error("GET /api/complaints: unable to read complaints.");
     const errorResponse: ComplaintListResponse = {
       success: false,
       complaints: [],
@@ -85,7 +86,8 @@ export async function GET(req: NextRequest) {
  * POST /api/complaints
  * Submits a new complaint.
  * Automatically performs text-only similarity grouping.
- * When group reaches >= 5, marks the group and all its members as emergency.
+ * Escalates eligible incident reports at five active distinct owners in 24h.
+ * Potential-hazard review is independent; replay never adds corroboration.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -135,15 +137,21 @@ export async function POST(req: NextRequest) {
       complainant_id: identity.userId,
     });
 
+    const projected = projectComplaintForApi(result.complaint);
     const response: CreateComplaintResponse = {
       success: true,
-      complaint: projectComplaintForApi(result.complaint),
-      cluster: result.cluster,
+      replayed: result.replayed,
+      complaint: projected,
+      cluster: { ...result.cluster, cluster_id: projected.cluster_id },
     };
 
-    return NextResponse.json(CreateComplaintResponseSchema.parse(response), { status: 201 });
+    return NextResponse.json(CreateComplaintResponseSchema.parse(response), { status: result.replayed ? 200 : 201 });
   } catch (error) {
-    console.error("POST /api/complaints error:", error);
+    if (error instanceof ComplaintSubmissionError) {
+      const status = error.code === "IDEMPOTENCY_CONFLICT" ? 409 : error.code === "INVALID_REQUEST" ? 400 : 500;
+      return NextResponse.json({ success: false, error: { code: error.code, message: error.message } }, { status });
+    }
+    console.error("POST /api/complaints: unable to save complaint.");
     const errorResponse: CreateComplaintResponse = {
       success: false,
       error: {

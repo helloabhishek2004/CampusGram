@@ -35,6 +35,25 @@ export const ComplaintStatusSchema = z.enum([
 ]);
 export type ComplaintStatus = z.infer<typeof ComplaintStatusSchema>;
 
+// Unvalidated deterministic review signals, not a safety clearance or probability.
+export const SafetyTriageSignalSchema = z.enum([
+  "fire_or_smoke",
+  "electrical_hazard",
+  "gas_leak",
+  "medical_distress",
+  "violence_or_threat",
+  "structural_collapse",
+]);
+export type SafetyTriageSignal = z.infer<typeof SafetyTriageSignalSchema>;
+
+export const SafetyTriageSchema = z.object({
+  review_required: z.boolean(),
+  signals: z.array(SafetyTriageSignalSchema),
+  basis: z.literal("deterministic_rules"),
+  policy_version: z.literal("phase1-v1"),
+});
+export type SafetyTriage = z.infer<typeof SafetyTriageSchema>;
+
 // ==============================================================================
 // Attachments
 // ==============================================================================
@@ -214,6 +233,12 @@ export type ComplaintAnalysisResponse = z.infer<
 
 export const COMPLAINT_EMERGENCY_THRESHOLD = 5;
 export const DEFAULT_COMPLAINT_SIMILARITY_THRESHOLD = 0.35;
+export const COMPLAINT_INCIDENT_WINDOW_MS = 86_400_000;
+export const COMPLAINT_ACTIVE_STATUSES = [
+  "submitted",
+  "under_review",
+  "in_progress",
+] as const satisfies readonly ComplaintStatus[];
 
 export const ComplaintRecordSchema = z.object({
   id: z.string(),
@@ -226,8 +251,13 @@ export const ComplaintRecordSchema = z.object({
   location_room: z.string().nullable().optional(),
   attachments: z.array(ComplaintAttachmentSchema).default([]),
   cluster_id: z.string(),
+  // Internal incident/replay metadata; not intended as a public explanation.
+  incident_scope: z.string().nullable().optional(),
+  submission_id: z.string().uuid().nullable().optional(),
+  submission_fingerprint: z.string().nullable().optional(),
   is_emergency: z.boolean().default(false),
   similar_count: z.number().int().nonnegative().default(1),
+  safety_triage: SafetyTriageSchema.optional(),
   assigned_to: z.string().nullable().optional(),
   response_note: z.string().nullable().optional(),
   last_updated_by: z.string().nullable().optional(),
@@ -238,6 +268,7 @@ export type ComplaintRecord = z.infer<typeof ComplaintRecordSchema>;
 
 export const CreateComplaintRequestSchema = z.object({
   text: z.string().min(5, "Complaint text must be at least 5 characters long"),
+  submission_id: z.string().uuid().optional(),
   attachments: z.array(ComplaintAttachmentSchema).optional(),
   complainant_id: z.string().optional(),
   category: ComplaintCategorySchema.optional(),
@@ -250,6 +281,7 @@ export type CreateComplaintRequest = z.infer<
 
 export const CreateComplaintResponseSchema = z.object({
   success: z.boolean(),
+  replayed: z.boolean().optional(),
   complaint: ComplaintRecordSchema.optional(),
   cluster: z
     .object({

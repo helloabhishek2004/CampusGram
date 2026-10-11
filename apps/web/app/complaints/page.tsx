@@ -38,6 +38,16 @@ import {
 import { cn } from "@smart-campus/utils";
 import { complaintGroupCounts } from "@/lib/complaints/group-counts";
 
+function SafetyReviewNotice() {
+  return (
+    <div className="rounded border border-amber-500/30 bg-amber-500/10 p-2 text-xs text-amber-700 dark:text-amber-300">
+      Potential serious hazard — staff review required. Unvalidated deterministic rules;
+      a missing flag is not safety clearance. For immediate danger, use{" "}
+      <Link href="/emergency" className="font-semibold underline">Life-Safety SOS</Link>.
+    </div>
+  );
+}
+
 export default function ComplaintsPage() {
   // Form State
   const [complaintText, setComplaintText] = useState("");
@@ -51,6 +61,7 @@ export default function ComplaintsPage() {
     isEmergency: boolean;
     groupCount: number;
     clusterId: string;
+    safetyReviewRequired: boolean;
   } | null>(null);
 
   // Feed State
@@ -72,6 +83,14 @@ export default function ComplaintsPage() {
 
   const fileInputRef = useRef<HTMLInputElement>(null);
   const fetchComplaintsSeq = useRef(0);
+  const submissionInFlight = useRef(false);
+  const submissionAttempt = useRef<{
+    key: string;
+    text: string;
+    category: ComplaintCategory;
+    file: File | null;
+    attachments: ComplaintAttachment[] | null;
+  } | null>(null);
 
   // Keyboard Escape listener to dismiss open modals
   useEffect(() => {
@@ -161,7 +180,7 @@ export default function ComplaintsPage() {
     }
   };
 
-  // Group emergency complaints into unique clusters
+  // Group server-reported volume escalations; safety review is independent.
   const emergencyClusters = useMemo(() => {
     const map = new Map<string, ComplaintRecord[]>();
     for (const c of complaints) {
@@ -193,11 +212,19 @@ export default function ComplaintsPage() {
         category: latest.category,
         latestDate: latest.created_at,
         latestReport: latest,
+        safetyReviewRequired: items.some((item) => item.safety_triage?.review_required),
         items: sorted,
         thumbnailUrl: thumbnail,
       };
     });
   }, [complaints]);
+
+  const selectedClusterIsEscalated = Boolean(
+    selectedCluster?.items.some((report) => report.is_emergency),
+  );
+  const selectedClusterCounts = selectedCluster
+    ? complaintGroupCounts(selectedCluster.items)
+    : null;
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
@@ -231,6 +258,7 @@ export default function ComplaintsPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (submissionInFlight.current) return;
     setFormError(null);
     setSubmitSuccess(null);
 
@@ -240,15 +268,32 @@ export default function ComplaintsPage() {
       return;
     }
 
+    submissionInFlight.current = true;
     setIsSubmitting(true);
 
     try {
-      const attachments: ComplaintAttachment[] = [];
+      // Retry unchanged content with the same key and already-issued attachments.
+      if (
+        !submissionAttempt.current ||
+        submissionAttempt.current.text !== trimmed ||
+        submissionAttempt.current.category !== category ||
+        submissionAttempt.current.file !== selectedFile
+      ) {
+        submissionAttempt.current = {
+          key: crypto.randomUUID(),
+          text: trimmed,
+          category,
+          file: selectedFile,
+          attachments: null,
+        };
+      }
+      const attempt = submissionAttempt.current;
+      const attachments: ComplaintAttachment[] = attempt.attachments ?? [];
 
       // 1. Upload image if selected
-      if (selectedFile) {
+      if (attempt.file && attempt.attachments === null) {
         const formData = new FormData();
-        formData.append("file", selectedFile);
+        formData.append("file", attempt.file);
 
         const uploadRes = await fetch("/api/complaints/upload", {
           method: "POST",
@@ -262,14 +307,16 @@ export default function ComplaintsPage() {
 
         attachments.push(uploadData.attachment);
       }
+      attempt.attachments = attachments;
 
       // 2. Submit complaint with text (similarity pipeline uses text)
       const submitRes = await fetch("/api/complaints", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          text: trimmed,
-          category,
+          text: attempt.text,
+          submission_id: attempt.key,
+          category: attempt.category,
           attachments,
         }),
       });
@@ -287,11 +334,15 @@ export default function ComplaintsPage() {
       };
 
       setSubmitSuccess({
-        message: "Your complaint has been recorded and grouped using deterministic text similarity.",
+        message: submitData.replayed
+          ? "Your earlier submission was returned; no extra report or corroboration was added."
+          : "Your complaint has been recorded and grouped using deterministic text similarity.",
         isEmergency: clusterInfo.is_emergency,
         groupCount: clusterInfo.group_count,
         clusterId: clusterInfo.cluster_id,
+        safetyReviewRequired: Boolean(submitData.complaint.safety_triage?.review_required),
       });
+      submissionAttempt.current = null;
 
       setComplaintText("");
       handleRemoveImage();
@@ -299,6 +350,7 @@ export default function ComplaintsPage() {
     } catch (err) {
       setFormError(err instanceof Error ? err.message : "Submission error occurred");
     } finally {
+      submissionInFlight.current = false;
       setIsSubmitting(false);
     }
   };
@@ -338,7 +390,9 @@ export default function ComplaintsPage() {
             <p className="text-xs text-muted-foreground mt-1 max-w-2xl">
               Deterministic text grouping with cluster-volume escalation. The standalone
               intelligence analyzer is not invoked by this submission path.
-              Clusters with 5 or more corroborating reports escalate to Emergency automatically.
+              Incidents escalate by volume at 5 distinct authenticated owners with active reports
+              in the last 24 hours. Safety flags request staff review independently. These rules
+              are unvalidated; a missing flag is not safety clearance.
             </p>
           </div>
 
@@ -466,6 +520,7 @@ export default function ComplaintsPage() {
                           <button
                             type="button"
                             onClick={handleRemoveImage}
+                            disabled={isSubmitting}
                             className="text-destructive hover:text-destructive/80 text-xs flex items-center gap-1"
                           >
                             <X className="w-3.5 h-3.5" /> Remove
@@ -499,12 +554,19 @@ export default function ComplaintsPage() {
                               : "bg-secondary text-secondary-foreground"
                           )}
                         >
-                          {submitSuccess.isEmergency ? "Escalated to Emergency" : "Normal Priority"}
+                          {submitSuccess.isEmergency ? "Active volume escalation" : "No volume escalation"}
                         </span>
                         <span className="text-muted-foreground text-[11px]">
-                          Cluster count: <strong>{submitSuccess.groupCount}</strong> reports
+                          Active distinct owners (24h): <strong>{submitSuccess.groupCount}</strong>
                         </span>
                       </div>
+                      <p className="text-[11px] text-muted-foreground">
+                        Volume escalation requires 5 distinct authenticated owners with active reports
+                        in the last 24 hours. It is not a safety diagnosis or clearance.
+                      </p>
+                      {submitSuccess.safetyReviewRequired && (
+                        <SafetyReviewNotice />
+                      )}
                     </div>
                   )}
                 </CardContent>
@@ -560,7 +622,7 @@ export default function ComplaintsPage() {
                       : "text-muted-foreground hover:text-foreground hover:bg-muted/50"
                   )}
                 >
-                  Normal
+                  No volume escalation
                   <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-secondary border border-border text-foreground">
                     {counts.normal}
                   </span>
@@ -577,7 +639,7 @@ export default function ComplaintsPage() {
                   )}
                 >
                   <Flame className="w-3.5 h-3.5" />
-                  Emergency (&ge; 5)
+                  Incidents (&ge; 5)
                   <span className="text-[10px] px-1.5 py-0.2 rounded-full bg-destructive/20 text-destructive border border-destructive/30">
                     {counts.emergency}
                   </span>
@@ -585,18 +647,19 @@ export default function ComplaintsPage() {
               </div>
 
               <div className="text-[10px] text-muted-foreground font-mono hidden sm:inline">
-                Threshold: &ge; 5
+                &ge; 5 owners · 24h
               </div>
             </div>
 
-            {/* Emergency Alert Banner */}
+            {/* Volume Escalation Banner */}
             {counts.emergency > 0 && activeTab !== "normal" && (
               <div className="p-3 bg-destructive/10 border border-destructive/30 rounded-xl flex items-start gap-2.5 text-xs text-destructive">
                 <AlertTriangle className="w-4 h-4 shrink-0 mt-0.5" />
                 <div>
                   <strong className="font-semibold text-destructive">Active High-Volume Escalations!</strong>
                   <p className="text-destructive/80 text-[11px] mt-0.5">
-                    Issues reported by 5 or more distinct members have auto-escalated to Emergency status for expedited dispatch.
+                    Incidents have 5 or more distinct authenticated owners with active reports created in the last 24 hours.
+                    This volume signal is separate from safety review and does not imply a validated emergency diagnosis or automatic dispatch.
                   </p>
                 </div>
               </div>
@@ -617,13 +680,15 @@ export default function ComplaintsPage() {
                 <span className="text-xs">Loading grievance records...</span>
               </div>
             ) : activeTab === "emergency" ? (
-              /* Emergency View */
+              /* Volume Escalation View */
               emergencyClusters.length === 0 ? (
                 <div className="p-10 text-center bg-card/40 rounded-xl border border-dashed border-border text-muted-foreground space-y-2">
                   <Layers className="w-8 h-8 text-muted-foreground/60 mx-auto" />
-                  <p className="text-xs font-semibold text-foreground">No active emergency clusters</p>
+                  <p className="text-xs font-semibold text-foreground">No active volume-escalated incidents visible to you</p>
                   <p className="text-[11px] text-muted-foreground">
-                    No similarity groups have met the 5-complaint threshold yet.
+                    No visible incident meets the threshold of 5 distinct authenticated owners with active reports
+                    in the last 24 hours. This is not safety clearance. For immediate danger, use{" "}
+                    <Link href="/emergency" className="font-semibold underline">Life-Safety SOS</Link>.
                   </p>
                 </div>
               ) : (
@@ -637,7 +702,7 @@ export default function ComplaintsPage() {
                         <div className="flex flex-wrap items-center justify-between gap-2">
                           <div className="flex items-center gap-2">
                             <span className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-destructive/20 text-destructive border border-destructive/30">
-                              <Flame className="w-3 h-3 text-destructive" /> EMERGENCY CLUSTER
+                              <Flame className="w-3 h-3 text-destructive" /> VOLUME ESCALATION
                             </span>
 
                             <span className="capitalize text-[10px] font-mono px-2 py-0.5 rounded border border-border bg-secondary text-secondary-foreground">
@@ -653,6 +718,11 @@ export default function ComplaintsPage() {
                       </CardHeader>
 
                       <CardContent className="space-y-3 text-xs">
+                        <p className="text-[11px] text-muted-foreground">
+                          At least 5 distinct authenticated owners have active reports in the last 24 hours.
+                          This is a volume signal, not a safety diagnosis.
+                        </p>
+                        {cluster.safetyReviewRequired && <SafetyReviewNotice />}
                         <p className="text-foreground font-medium leading-relaxed break-words whitespace-pre-wrap">
                           {cluster.latestReport.text}
                         </p>
@@ -688,7 +758,7 @@ export default function ComplaintsPage() {
 
                         <div className="flex items-center gap-2">
                           <span className="font-bold px-2 py-0.5 rounded text-[10px] bg-destructive/20 text-destructive border border-destructive/30 font-mono">
-                            {cluster.globalCount} matching reports
+                            {cluster.globalCount} active owners · 24h
                           </span>
 
                           <button
@@ -704,17 +774,19 @@ export default function ComplaintsPage() {
                 </div>
               )
             ) : (
-              /* All or Normal View */
+              /* All or Non-Escalated View */
               complaints.length === 0 ? (
                 <div className="p-10 text-center bg-card/40 rounded-xl border border-dashed border-border text-muted-foreground space-y-2">
                   <Layers className="w-8 h-8 text-muted-foreground/60 mx-auto" />
                   <p className="text-xs font-semibold text-foreground">
                     {activeTab === "normal"
-                      ? "No normal complaints currently."
-                      : "No complaints have been reported yet."}
+                      ? "No complaints without volume escalation are visible to you."
+                      : "No complaints are visible to you."}
                   </p>
                   <p className="text-[11px] text-muted-foreground">
-                    Use the form on the left to submit a grievance.
+                    Use the form to submit a grievance. An empty list is not safety clearance.
+                    For immediate danger, use{" "}
+                    <Link href="/emergency" className="font-semibold underline">Life-Safety SOS</Link>.
                   </p>
                 </div>
               ) : (
@@ -737,11 +809,11 @@ export default function ComplaintsPage() {
                             <div className="flex items-center gap-2">
                               {isEmergency ? (
                                 <span className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-destructive/20 text-destructive border border-destructive/30">
-                                  <Flame className="w-3 h-3 text-destructive" /> EMERGENCY
+                                  <Flame className="w-3 h-3 text-destructive" /> VOLUME ESCALATION
                                 </span>
                               ) : (
                                 <span className="text-[10px] font-mono px-2 py-0.5 rounded bg-secondary text-secondary-foreground border border-border">
-                                  Standard
+                                  No volume escalation
                                 </span>
                               )}
 
@@ -761,6 +833,9 @@ export default function ComplaintsPage() {
                         </CardHeader>
 
                         <CardContent className="space-y-3 text-xs">
+                          {item.safety_triage?.review_required && (
+                            <SafetyReviewNotice />
+                          )}
                           <p className="text-foreground font-medium leading-relaxed break-words whitespace-pre-wrap">
                             {item.text}
                           </p>
@@ -813,10 +888,10 @@ export default function ComplaintsPage() {
                                   : "bg-secondary text-secondary-foreground"
                               )}
                             >
-                              {item.similar_count} {item.similar_count === 1 ? "report" : "similar reports"}
+                              {item.similar_count} {item.similar_count === 1 ? "active owner" : "active owners"} · 24h
                             </span>
 
-                            {isEmergency && item.similar_count >= 5 && (
+                            {(isEmergency || item.safety_triage?.review_required) && (
                               <button
                                 onClick={() => {
                                   const clusterItems = complaints.filter(
@@ -829,7 +904,7 @@ export default function ComplaintsPage() {
                                 }}
                                 className="text-xs px-2.5 py-1 rounded-lg text-destructive border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 transition-colors font-medium"
                               >
-                                View cluster &rarr;
+                                View group &rarr;
                               </button>
                             )}
                           </div>
@@ -902,8 +977,14 @@ export default function ComplaintsPage() {
               <div className="flex items-center justify-between border-b border-border p-4 bg-muted/40">
                 <div className="space-y-1">
                   <div className="flex items-center gap-2">
-                    <span className="flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded font-bold bg-destructive/20 text-destructive border border-destructive/30">
-                      <Flame className="w-3 h-3 text-destructive" /> EMERGENCY CLUSTER
+                    <span className={cn(
+                      "flex items-center gap-1 text-[10px] font-mono px-2 py-0.5 rounded font-bold border",
+                      selectedClusterIsEscalated
+                        ? "bg-destructive/20 text-destructive border-destructive/30"
+                        : "bg-secondary text-secondary-foreground border-border",
+                    )}>
+                      {selectedClusterIsEscalated && <Flame className="w-3 h-3 text-destructive" />}
+                      {selectedClusterIsEscalated ? "VOLUME ESCALATION" : "No volume escalation"}
                     </span>
                     <h3 id="cluster-dialog-title" className="font-semibold text-foreground text-sm">
                       {selectedCluster.items.length} Reports Visible to You
@@ -928,7 +1009,10 @@ export default function ComplaintsPage() {
                 <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                   <span>
-                    Only reports you are permitted to view are shown below. The matching-report badge reflects the global group count.
+                    Only reports you are permitted to view are shown below. The group has{" "}
+                    <strong>{selectedClusterCounts?.globalCount}</strong> distinct authenticated owners with active
+                    reports in the last 24 hours; 5 are required for volume escalation. This is separate from
+                    safety review and is not safety clearance.
                   </span>
                 </div>
 
@@ -950,6 +1034,7 @@ export default function ComplaintsPage() {
                       </div>
                     </div>
 
+                    {report.safety_triage?.review_required && <SafetyReviewNotice />}
                     <p className="text-foreground text-xs font-medium leading-relaxed break-words whitespace-pre-wrap">
                       {report.text}
                     </p>

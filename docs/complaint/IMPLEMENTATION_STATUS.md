@@ -8,7 +8,10 @@
 **Latest local verification (2026-10-11):** Phase 6B executed local Supabase-backed
 authentication, ownership, five-owner aggregation, lifecycle/history, safe rollback,
 and attachment acceptance. See `ACCEPTANCE_REPORT.md` for precise results and fixes.
-Hosted Supabase and browser E2E remain unverified; the browser tool timed out.
+Fresh rerun on `main` at `65c06fc` passed 10 live scenario groups, 76 focused tests
+and 346 full-suite tests without new application changes. Hosted Supabase and
+browser E2E remain unverified: the latest browser attempt opened successfully but
+awaits user completion of the sensitive OTP handoff; the earlier attempt timed out.
 
 ## Outcome
 

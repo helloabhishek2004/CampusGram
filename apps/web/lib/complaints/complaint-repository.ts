@@ -2,14 +2,18 @@ import crypto from "crypto";
 import {
   ComplaintRecord,
   CreateComplaintRequest,
-  COMPLAINT_EMERGENCY_THRESHOLD,
   ComplaintAttachment,
   ComplaintLifecycleUpdate,
   ComplaintRecordSchema,
+  ComplaintListResponseSchema,
+  CreateComplaintResponseSchema,
+  SafetyTriageSignalSchema,
   ComplaintStatusHistoryEntry as ComplaintStatusHistoryView,
 } from "@smart-campus/contracts";
-import { findMatchingCluster, ExistingComplaintCandidate } from "./similarity-service";
-import { createApplicationClient, createServiceClient } from "../supabase/server";
+import { findMatchingCluster, getSimilarityThreshold } from "./similarity-service";
+import { createServiceClient } from "../supabase/server";
+import { aggregateIncidents, deriveIncidentScope, isActiveIncidentReport } from "./incident-policy";
+import { deriveSafetyTriage } from "./safety-triage";
 
 // Fallback in-memory store for offline/local hackathon mock mode
 const inMemoryComplaints: ComplaintRecord[] = [
@@ -68,6 +72,27 @@ type StoredComplaintStatusHistoryEntry = {
 
 const inMemoryComplaintStatusHistory: StoredComplaintStatusHistoryEntry[] = [];
 
+// Offline parity only. Configured writes use the DB transaction/advisory lock.
+let memoryWriteQueue: Promise<void> = Promise.resolve();
+async function serializeMemoryWrite<T>(work: () => Promise<T>): Promise<T> {
+  const preceding = memoryWriteQueue;
+  let release!: () => void;
+  memoryWriteQueue = new Promise<void>((resolve) => { release = resolve; });
+  await preceding;
+  try { return await work(); } finally { release(); }
+}
+
+export class ComplaintSubmissionError extends Error {
+  constructor(readonly code: "IDEMPOTENCY_CONFLICT" | "INVALID_REQUEST" | "PERSISTENCE_FAILED") {
+    super(code === "IDEMPOTENCY_CONFLICT"
+      ? "This submission key was already used for a different complaint."
+      : code === "INVALID_REQUEST"
+        ? "A valid complaint and authenticated owner are required."
+        : "Complaint persistence failed. No success was recorded.");
+    this.name = "ComplaintSubmissionError";
+  }
+}
+
 export class ComplaintLifecycleError extends Error {
   constructor(
     message: string,
@@ -92,28 +117,8 @@ function isSupabaseConfigured(): boolean {
 }
 
 /**
- * Recomputes dynamic similar_count for all complaints in memory
- * based on the number of complaints sharing each cluster_id.
+ * Maps internal database rows; API projection removes identity/replay metadata.
  */
-function recalculateClusterCounts(records: ComplaintRecord[]): ComplaintRecord[] {
-  const clusterCounts = new Map<string, number>();
-
-  for (const r of records) {
-    const count = (clusterCounts.get(r.cluster_id) || 0) + 1;
-    clusterCounts.set(r.cluster_id, count);
-  }
-
-  return records.map((r) => {
-    const count = clusterCounts.get(r.cluster_id) || 1;
-    const isEmergency = count >= COMPLAINT_EMERGENCY_THRESHOLD;
-    return {
-      ...r,
-      similar_count: count,
-      is_emergency: isEmergency,
-    };
-  });
-}
-
 function mapComplaintRow(row: Record<string, unknown>): ComplaintRecord {
   return {
     id: String(row.id),
@@ -132,7 +137,18 @@ function mapComplaintRow(row: Record<string, unknown>): ComplaintRecord {
       ? row.cluster_id
       : `cluster_${String(row.id)}`,
     is_emergency: Boolean(row.is_emergency),
-    similar_count: 1,
+    similar_count: row.similar_count === undefined ? 0 : Number(row.similar_count),
+    incident_scope: typeof row.incident_scope === "string" ? row.incident_scope : null,
+    submission_id: typeof row.submission_id === "string" ? row.submission_id : null,
+    submission_fingerprint: typeof row.submission_fingerprint === "string" ? row.submission_fingerprint : null,
+    safety_triage: row.incident_scope
+      ? {
+          review_required: row.status === "submitted" && Array.isArray(row.safety_signals) && row.safety_signals.length > 0,
+          signals: SafetyTriageSignalSchema.array().parse(row.safety_signals ?? []),
+          basis: "deterministic_rules",
+          policy_version: "phase1-v1",
+        }
+      : deriveSafetyTriage(String(row.text || ""), (row.status || "submitted") as ComplaintRecord["status"]),
     assigned_to: typeof row.assigned_to === "string" ? row.assigned_to : null,
     response_note: typeof row.response_note === "string" ? row.response_note : null,
     last_updated_by:
@@ -142,9 +158,13 @@ function mapComplaintRow(row: Record<string, unknown>): ComplaintRecord {
   };
 }
 
-/**
- * Fetches all complaints and recalculates real-time group counts & emergency status.
- */
+function sortForReview(records: ComplaintRecord[]): ComplaintRecord[] {
+  return [...records].sort((a, b) =>
+    Number(Boolean(b.safety_triage?.review_required)) - Number(Boolean(a.safety_triage?.review_required)) ||
+    new Date(b.created_at).getTime() - new Date(a.created_at).getTime() || a.id.localeCompare(b.id));
+}
+
+/** Fetch global incident metadata before restricting the viewer's rows. */
 export async function getComplaints(
   view: "all" | "normal" | "emergency" = "all",
   viewer?: { userId: string; canViewAll: boolean },
@@ -152,38 +172,30 @@ export async function getComplaints(
   complaints: ComplaintRecord[];
   counts: { total: number; normal: number; emergency: number };
 }> {
-  let records: ComplaintRecord[] = [];
-
   if (isSupabaseConfigured()) {
-    try {
-       const supabase = await createApplicationClient();
-      // Load the authoritative dataset before applying the application-level
-      // owner projection. Cluster volume is a campus-wide property, so an
-      // owner-scoped query here would under-count clusters for students.
-      const { data, error } = await supabase
-        .from("complaints")
-        .select("*")
-        .order("created_at", { ascending: false });
-
-      if (error) {
-        throw new Error(`Complaint read failed: ${error.message}`);
-      }
-      if (data) {
-        records = data.map((d: Record<string, unknown>) =>
-          ComplaintRecordSchema.parse(mapComplaintRow(d)),
-        );
-      }
-    } catch (err) {
-      throw err instanceof Error ? err : new Error("Complaint read failed");
+    const { data, error } = await createServiceClient().rpc("read_complaints_phase1", {
+      p_view: view,
+      p_viewer: viewer?.userId ?? null,
+      p_can_view_all: viewer?.canViewAll ?? true,
+    });
+    if (error || !data || !Array.isArray(data.complaints)) {
+      throw new Error("Unable to read complaints.");
     }
-  } else {
-    records = [...inMemoryComplaints];
+    // RPC aggregates ALL rows first, then projects authorized rows. A scalar
+    // response avoids the API max_rows cap and never transfers students' peers.
+    const result = ComplaintListResponseSchema.parse({
+      success: true,
+      complaints: data.complaints.map((row: Record<string, unknown>) =>
+        ComplaintRecordSchema.parse(mapComplaintRow(row))),
+      counts: data.counts,
+    });
+    return { complaints: sortForReview(result.complaints), counts: result.counts };
   }
 
   // Calculate aggregate metadata from every authoritative record first. The
   // viewer projection below must not change a cluster's count or emergency
   // state merely because the viewer is a student.
-  const calculated = recalculateClusterCounts(records);
+  const calculated = aggregateIncidents(inMemoryComplaints);
 
   // Summary stats intentionally describe the global dataset, while complaint
   // rows remain subject to the viewer's ownership projection.
@@ -203,17 +215,14 @@ export async function getComplaints(
     filtered = visibleRecords.filter((c) => c.is_emergency);
   }
 
-  // Sort newest first
-  filtered.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
-
   return {
-    complaints: filtered,
+    complaints: sortForReview(filtered),
     counts: { total, normal, emergency },
   };
 }
 
 /**
- * Creates a complaint with automatic text-only clustering and 5-item emergency transition.
+ * Creates or replays a report; safety review and active-owner volume are separate.
  */
 export async function createComplaint(data: CreateComplaintRequest): Promise<{
   complaint: ComplaintRecord;
@@ -222,88 +231,82 @@ export async function createComplaint(data: CreateComplaintRequest): Promise<{
     group_count: number;
     is_emergency: boolean;
   };
+  replayed: boolean;
 }> {
-  // 1. Get all current complaints for candidate matching
-  const { complaints: allComplaints } = await getComplaints("all");
+  if (!data.complainant_id?.trim() || data.text.trim().length < 5 || !/[\p{L}\p{N}]/u.test(data.text)) {
+    throw new ComplaintSubmissionError("INVALID_REQUEST");
+  }
+  const text = data.text.trim();
+  const scope = deriveIncidentScope({ ...data, text });
+  const triage = deriveSafetyTriage(text);
+  const fingerprint = crypto.createHash("sha256").update(JSON.stringify({
+    text: text.toLowerCase().replace(/\s+/g, " "),
+    scope,
+    category: data.category ?? "other",
+    attachments: data.attachments ?? [],
+  })).digest("hex");
 
-  const candidates: ExistingComplaintCandidate[] = allComplaints.map((c) => ({
-    id: c.id,
-    text: c.text,
-    cluster_id: c.cluster_id,
-  }));
-
-  // 2. Perform text-only similarity matching (NO image ML)
-  const matchResult = findMatchingCluster(data.text, candidates);
-  const targetClusterId = matchResult.cluster_id;
-
-  // 3. Calculate cluster count after this new complaint is added
-  const existingGroupMembers = allComplaints.filter(
-    (c) => c.cluster_id === targetClusterId,
-  );
-  const newGroupCount = existingGroupMembers.length + 1;
-  const isEmergency = newGroupCount >= COMPLAINT_EMERGENCY_THRESHOLD;
-
-  const newId = crypto.randomUUID();
-  const now = new Date().toISOString();
-
-  const newRecord: ComplaintRecord = {
-    id: newId,
-    complainant_id: data.complainant_id || null,
-    text: data.text,
-    status: "submitted",
-    category: data.category || "other",
-    subcategory: null,
-    location_building: data.location_building || null,
-    location_room: data.location_room || null,
-    attachments: data.attachments || [],
-    cluster_id: targetClusterId,
-    is_emergency: isEmergency,
-    similar_count: newGroupCount,
-    created_at: now,
-    updated_at: now,
-  };
-
-  // 4. Persistence
   if (isSupabaseConfigured()) {
-     try {
-       const { error: persistError } = await createServiceClient().rpc(
-         "persist_complaint_with_emergency",
-         {
-           p_id: newRecord.id,
-           p_complainant_id: newRecord.complainant_id,
-           p_text: newRecord.text,
-           p_status: newRecord.status,
-           p_category: newRecord.category,
-           p_location_building: newRecord.location_building,
-           p_location_room: newRecord.location_room,
-           p_attachments: newRecord.attachments,
-           p_cluster_id: newRecord.cluster_id,
-           p_is_emergency: newRecord.is_emergency,
-           p_created_at: newRecord.created_at,
-           p_updated_at: newRecord.updated_at,
-         },
-       );
-       if (persistError) {
-         throw new Error(`Complaint persistence failed: ${persistError.message}`);
-       }
-    } catch (err) {
-      // Do not report success or silently diverge from the database when a
-      // configured backend rejects the write. Similarity was computed above,
-      // but persistence must remain truthful.
-      throw err instanceof Error ? err : new Error("Complaint persistence failed");
+    const { data: saved, error } = await createServiceClient().rpc("create_complaint_phase1", {
+      p_id: crypto.randomUUID(),
+      p_owner: data.complainant_id,
+      p_text: text,
+      p_category: data.category ?? "other",
+      p_location_building: data.location_building ?? null,
+      p_location_room: data.location_room ?? null,
+      p_attachments: data.attachments ?? [],
+      p_submission_id: data.submission_id ?? null,
+      p_fingerprint: fingerprint,
+      p_scope: scope,
+      p_safety_signals: triage.signals,
+      p_similarity_threshold: getSimilarityThreshold(),
+    });
+    if (error) {
+      throw new ComplaintSubmissionError(error.code === "PT409" ? "IDEMPOTENCY_CONFLICT" : "PERSISTENCE_FAILED");
     }
-  } else {
-    persistToMemory(newRecord, targetClusterId, isEmergency);
+    if (!saved?.complaint || !saved.cluster || typeof saved.replayed !== "boolean") {
+      throw new ComplaintSubmissionError("PERSISTENCE_FAILED");
+    }
+    const response = CreateComplaintResponseSchema.parse({
+      success: true,
+      complaint: mapComplaintRow(saved.complaint),
+      cluster: saved.cluster,
+      replayed: saved.replayed,
+    });
+    return { complaint: response.complaint!, cluster: response.cluster!, replayed: response.replayed! };
   }
 
-  return {
-    complaint: newRecord,
-    cluster: {
-      cluster_id: targetClusterId,
-      group_count: newGroupCount,
-      is_emergency: isEmergency,
-    },
-  };
+  return serializeMemoryWrite(async () => {
+    const now = Date.now();
+    const prior = inMemoryComplaints.find((row) => row.complainant_id === data.complainant_id &&
+      (data.submission_id ? row.submission_id === data.submission_id :
+        row.submission_fingerprint === fingerprint && isActiveIncidentReport(row, now)));
+    if (prior && prior.submission_fingerprint !== fingerprint) {
+      throw new ComplaintSubmissionError("IDEMPOTENCY_CONFLICT");
+    }
+    let row = prior;
+    if (!row) {
+      const candidates = inMemoryComplaints.filter((candidate) =>
+        isActiveIncidentReport(candidate, now) &&
+        (candidate.incident_scope || deriveIncidentScope(candidate)) === scope)
+        .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime() || a.id.localeCompare(b.id));
+      const match = findMatchingCluster(text, candidates);
+      row = {
+        id: crypto.randomUUID(), complainant_id: data.complainant_id,
+        text, status: "submitted", category: data.category ?? "other", subcategory: null,
+        location_building: data.location_building ?? null, location_room: data.location_room ?? null,
+        attachments: data.attachments ?? [], cluster_id: match.cluster_id, incident_scope: scope,
+        submission_id: data.submission_id ?? null, submission_fingerprint: fingerprint,
+        safety_triage: triage, is_emergency: false, similar_count: 0,
+        created_at: new Date(now).toISOString(), updated_at: new Date(now).toISOString(),
+      };
+      // Assignment and insertion occur in one serialized process-local write.
+      inMemoryComplaints.unshift(row);
+    }
+    const complaint = aggregateIncidents(inMemoryComplaints, now).find((item) => item.id === row!.id)!;
+    return { complaint, cluster: { cluster_id: complaint.cluster_id,
+      group_count: complaint.similar_count, is_emergency: complaint.is_emergency }, replayed: Boolean(prior) };
+  });
 }
 
 const VALID_STATUS_TRANSITIONS: Record<
@@ -331,6 +334,16 @@ function assertValidStatusTransition(
 }
 
 export async function updateComplaintLifecycle(input: {
+  complaintId: string;
+  actorId: string;
+  canManage: boolean;
+  update: ComplaintLifecycleUpdate;
+}): Promise<ComplaintRecord> {
+  if (!isSupabaseConfigured()) return serializeMemoryWrite(() => updateComplaintLifecycleUnlocked(input));
+  return updateComplaintLifecycleUnlocked(input);
+}
+
+async function updateComplaintLifecycleUnlocked(input: {
   complaintId: string;
   actorId: string;
   canManage: boolean;
@@ -425,7 +438,7 @@ export async function updateComplaintLifecycle(input: {
       created_at: now,
     });
   }
-  return record;
+  return aggregateIncidents(inMemoryComplaints).find((row) => row.id === record.id)!;
 }
 
 export async function getComplaintStatusHistory(
@@ -437,7 +450,7 @@ export async function getComplaintStatusHistory(
       .select("from_status,to_status,note,created_at")
       .eq("complaint_id", complaintId)
       .order("created_at", { ascending: true });
-    if (error) throw new Error(`Complaint history read failed: ${error.message}`);
+    if (error) throw new Error("Unable to read complaint history.");
     return (data || []).map((row: Record<string, unknown>) => ({
       from_status: row.from_status as ComplaintStatusHistoryView["from_status"],
       to_status: row.to_status as ComplaintStatusHistoryView["to_status"],
@@ -454,23 +467,6 @@ export async function getComplaintStatusHistory(
       note,
       created_at,
     }));
-}
-
-function persistToMemory(
-  newRecord: ComplaintRecord,
-  targetClusterId: string,
-  isEmergency: boolean,
-) {
-  // If emergency threshold is crossed, update existing cluster peers
-  if (isEmergency) {
-    for (const item of inMemoryComplaints) {
-      if (item.cluster_id === targetClusterId) {
-        item.is_emergency = true;
-      }
-    }
-  }
-
-  inMemoryComplaints.unshift(newRecord);
 }
 
 /**
