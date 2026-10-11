@@ -1,4 +1,5 @@
-import { rm } from "node:fs/promises";
+import { access, rm } from "node:fs/promises";
+import path from "node:path";
 import { describe, expect, it } from "vitest";
 import { NextRequest } from "next/server";
 import { POST as createComplaintRoute } from "../app/api/complaints/route";
@@ -53,8 +54,10 @@ describe("complaint attachment security", () => {
         .toMatchObject({ ownerId: owner.id, mimeType: "image/png" });
 
       const safePath = getComplaintAttachmentPathForTesting(attachment.url);
-      expect(safePath).toContain("/public/uploads/complaints/");
+      expect(path.dirname(safePath)).toBe(path.join(process.cwd(), ".data", "uploads", "complaints"));
       expect(safePath).not.toContain("escape");
+      await expect(access(path.join(process.cwd(), "public", attachment.url.slice(1))))
+        .rejects.toThrow();
 
       await expect(validateComplaintAttachmentReference(attachment, owner.id)).resolves.toMatchObject({
         id: attachment.id,

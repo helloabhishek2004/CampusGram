@@ -316,3 +316,163 @@ performed.
   confirmed and remote mutation remains prohibited.
 - Attachment storage remains the existing local/demo filesystem implementation and
   is not a production durability claim.
+
+## Phase 6B — Executed local acceptance (2026-10-11)
+
+**Result: PASS for the executed local API/database scenarios after focused fixes;
+BLOCKED for browser E2E. This is not a production-readiness or warning-free claim.**
+
+### Target, baseline, and environment gate
+
+- Branch: `feature/lost-found-workflow`; starting HEAD `9d5379e`.
+- The worktree was clean at the start of this phase. Previously developed Complaint,
+  Lost & Found, migration-renaming, and seed/configuration work was already present
+  in that baseline and was preserved. This phase made no commits, branch switches,
+  pushes, resets, stashes, or destructive Docker cleanup.
+- Installed Next.js version: **15.5.27**. A temporary diagnostic resolved its own
+  installed `@next/env` and invoked `loadEnvConfig(apps/web, true, ...)`, without
+  loading config/route handlers or booting a server. Production-mode loading was
+  checked separately and passed too.
+- Loader precedence: inherited process variables, `.env.development.local`,
+  `.env.local`, `.env.development`, `.env` within `apps/web` (production uses the
+  corresponding production filenames). The loader does not read parent/root env
+  files. Only `apps/web/.env.local` was loaded on this run; none of the required
+  variables came from an inherited process override.
+- Effective URL was exactly `http://127.0.0.1:54321`. Anon/service-role credentials
+  matched local `supabase status` in memory. Session secret was nonempty, auth/OTP/AI
+  modes were `mock`, and app URL was `http://localhost:3000`. No configured nonlocal
+  database/storage/AI endpoint was found in the effective app environment.
+- Values, prefixes, hashes, cookies, and authorization headers were not included in
+  reports. The ignored app environment file was not changed in this phase.
+- Local Auth health returned HTTP 200. Migration `20261009182617`, history table,
+  and both complaint RPCs were present before writes. Initial complaint count was 0.
+- No hosted Supabase project was contacted or mutated. All test database clients used
+  the verified loopback URL or the named local Docker PostgreSQL container. No reset,
+  migration application, or institutional seed rerun occurred in this phase.
+- Web startup: `NEXT_TELEMETRY_DISABLED=1 pnpm --filter @smart-campus/web dev`.
+  `/login` and `/complaints` returned HTTP 200 at `http://localhost:3000`.
+
+### Scenario results — executed versus unverified
+
+| Scenario                                  | Status                               | Executed evidence                                                                                                                                                                                                                                                                             |
+| ----------------------------------------- | ------------------------------------ | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Six fictional identities                  | PASS                                 | Institutional lookup, OTP send/verify, HTTP-only cookie, and canonical profile link for `STU2026001`–`STU2026005` and `FAC1011`; six different linked profile IDs.                                                                                                                            |
+| Unauthenticated/spoofed requests          | PASS                                 | Complaint create/upload without a cookie returned 401 even with body ownership/role fields.                                                                                                                                                                                                   |
+| Expired/tampered/canonical-spoof sessions | PASS                                 | Live complaint requests returned 401 for modified signatures, signed expired payloads, wrong linked profile, and unknown directory identity.                                                                                                                                                  |
+| Inactive session                          | PASS                                 | Temporarily disabled fictional Student B, observed 401, restored its original active state in `finally`.                                                                                                                                                                                      |
+| Server-derived creation and contract      | PASS                                 | Submitted Student A complaint while naming Student B in body; database owner remained Student A. Response passed shared Zod schema and text/cluster matched local DB read-back.                                                                                                               |
+| Owner/privacy projection                  | PASS                                 | Owner detail succeeded; Student B detail returned 404 and its feed excluded A's row. Complaint/history responses omitted raw ownership, assignment, and actor columns.                                                                                                                        |
+| Validation/no partial records             | PASS                                 | Short text, invalid category, external attachment URL, and unissued reference returned 400; complaint count unchanged.                                                                                                                                                                        |
+| Five-owner threshold                      | PASS                                 | Five different profile owners and five different complaint records in one cluster. Counts 1–4 were normal; fifth creation and stored peers were emergency.                                                                                                                                    |
+| Global count before student projection    | PASS                                 | Each owner's emergency feed contained exactly its one permitted row with `similar_count=5`; owner detail returned no other owners' peer rows.                                                                                                                                                 |
+| Staff queue and all transition edges      | PASS                                 | Authorized faculty fixture could view eligible rows and execute all documented transition edges. 12 transitions on one complaint persisted actor attribution, response notes, ownership, and history.                                                                                         |
+| Invalid transitions/required notes        | PASS                                 | Submitted→in_progress rejected; rejection without a note rejected; fresh in_progress complaint could not resolve without a note.                                                                                                                                                              |
+| Forged staff mutation                     | PASS                                 | Student PATCH returned 403 even with forged role/actor fields.                                                                                                                                                                                                                                |
+| Emergency RPC rollback                    | PASS                                 | A duplicate-PK insert failed after attempting an emergency cascade; peer emergency state, text, and update timestamp remained unchanged.                                                                                                                                                      |
+| Lifecycle/history rollback                | PASS                                 | A temporary local history check constraint failed after the complaint update; status, note, timestamp, and history count all rolled back. Transaction-local constraint was rolled back too.                                                                                                   |
+| API-level DB failures                     | PASS after fix                       | Temporary sentinel constraints induced real create/lifecycle RPC failures. HTTP 500 reported no success and did not expose SQL/constraint details; no failed create row or partial lifecycle/history persisted. Both constraints were removed in `finally`, and catalog cleanup was verified. |
+| JPEG/PNG/WebP/GIF signature matrix        | PASS                                 | Live upload route accepted supported magic-byte fixtures and rejected forged bytes, MIME mismatch, and >5 MB input. These are signature tests, not full decoder validation of every image format.                                                                                             |
+| Issued attachment ownership               | PASS after fix                       | Fresh owner upload could be attached; another owner could not reuse it. Owner/staff reads returned exact PNG bytes, Student B 403, anonymous 401; forged/missing references rejected.                                                                                                         |
+| Legacy public byte bypass                 | PASS after fix                       | Existing tracked `.jpeg` initially returned anonymous 200. The `beforeFiles` rewrite now sends that namespace through auth before static lookup; the same URL returned 401. Existing tracked images were not moved/deleted.                                                                   |
+| Browser workflow                          | BLOCKED                              | Built-in `browser_open` timed out; subsequent `browser_tabs` returned no tab. No login, form, modal, validation display, visual attachment, or staff UI action was performed in a browser. Browser E2E NOT RUN.                                                                               |
+| UI global-count display                   | PASS — model; NOT VERIFIED — browser | Subsequently fixed to use global `similar_count`, while inspection/modal counts describe visible permitted rows. Two regressions pass for owner-visible 1/global 5 and staff-visible 5/global 5. Browser rendering was not exercised.                                                         |
+| Direct authenticated-JWT RLS              | NOT VERIFIED                         | Mock cookies are not Supabase Auth JWTs; the app uses an authorized service-role path. Read-only grants confirmed lifecycle RPC executes only for service_role, not anon/authenticated. This is not a full JWT/RLS walkthrough.                                                               |
+| Concurrency/replay/deployment durability  | NOT VERIFIED                         | Serial acceptance does not establish concurrent cluster assignment, replay idempotency, or durable hosting storage.                                                                                                                                                                           |
+
+### Defects reproduced and fixed
+
+1. **Public attachment bytes bypassed ownership.** Owner-bound upload references
+   prevented reuse but public static serving allowed another student to download the
+   bytes. New files now live in ignored `apps/web/.data/uploads/complaints`; the
+   existing URL is rewritten before static file lookup to an authenticated route.
+   Owner/staff checks, byte signature/size validation, path restrictions, and
+   private/no-store/nosniff headers protect reads. Existing legacy assets are rejected
+   through the complaint namespace, not silently migrated or deleted.
+2. **Attachment keys differed across route bundles.** A module-local random fallback
+   failed real upload→create/read across newly compiled Next routes. Dedicated
+   attachment-secret precedence is retained; configured auth-secret fallback uses a
+   domain-separated key. Offline random state is shared across module reloads within
+   one process. Fresh-upload HTTP retest passed after this fix.
+3. **Lifecycle DB error details leaked.** Real failing history insertion exposed the
+   PostgreSQL constraint message in PATCH response. User-facing persistence/transition
+   errors now use fixed safe sentences. Failure-injection retest passed.
+
+New regression suites: `complaint-attachment-read.test.ts` (21),
+`complaint-attachment-token-key.test.ts` (5),
+`complaint-attachment-routing.test.ts` (7), and `complaint-lifecycle-rpc.test.ts` (9).
+The existing attachment-storage assertion was updated to enforce non-public storage.
+
+### Phase 6B command receipts
+
+| Command                                                                                                                                                                                                                                                                                                                                                    | Result                                                                                                                                                       |
+| ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `node /tmp/omnirush/phase6-env-gate.cjs`                                                                                                                                                                                                                                                                                                                   | PASS; installed Next environment loader, local-status credential comparison and development gate.                                                            |
+| `node /tmp/omnirush/phase6-env-gate.cjs production`                                                                                                                                                                                                                                                                                                        | PASS; production environment gate.                                                                                                                           |
+| `NEXT_TELEMETRY_DISABLED=1 pnpm --filter @smart-campus/web dev`                                                                                                                                                                                                                                                                                            | PASS; local web server launched.                                                                                                                             |
+| `curl --max-time 60 -sS -o /dev/null -w 'LOGIN_HTTP=%{http_code}\n' http://localhost:3000/login`                                                                                                                                                                                                                                                           | HTTP 200.                                                                                                                                                    |
+| `curl --max-time 60 -sS -o /dev/null -w 'COMPLAINTS_HTTP=%{http_code}\n' http://localhost:3000/complaints`                                                                                                                                                                                                                                                 | HTTP 200.                                                                                                                                                    |
+| `node /tmp/omnirush/phase6-live.cjs`                                                                                                                                                                                                                                                                                                                       | Initial 16 live check groups: 15 PASS, 1 FAIL (public cross-owner attachment bytes).                                                                         |
+| `node /tmp/omnirush/phase6-attachment-retest.cjs`                                                                                                                                                                                                                                                                                                          | Final fresh-upload retest: 15 assertions PASS, 0 FAIL, including live byte equality and read ownership.                                                      |
+| `docker exec -i supabase_db_campus-hackthon psql -X -U postgres -d postgres -v ON_ERROR_STOP=1 < /tmp/omnirush/phase6-atomic-history.sql`                                                                                                                                                                                                                  | PASS; injected history failure rolled back complaint/history, test constraint removed.                                                                       |
+| `supabase db query --local --file /tmp/omnirush/phase6-atomic-history.sql`                                                                                                                                                                                                                                                                                 | Initial diagnostic failed because CLI uses a single prepared statement; no SQL batch executed. Used local container psql for the transaction instead.        |
+| `node /tmp/omnirush/phase6-api-errors.cjs`                                                                                                                                                                                                                                                                                                                 | Final 5 PASS assertions: generic create/lifecycle errors, no insert, lifecycle rollback, constraint cleanup.                                                 |
+| `pnpm --filter @smart-campus/web exec vitest run tests/complaint.test.ts tests/complaint-attachment-security.test.ts tests/complaint-attachment-read.test.ts tests/complaint-attachment-token-key.test.ts tests/complaint-attachment-routing.test.ts tests/complaint-lifecycle.test.ts tests/complaint-lifecycle-rpc.test.ts tests/auth-hardening.test.ts` | PASS — 74 tests, 8 files.                                                                                                                                    |
+| `pnpm test`                                                                                                                                                                                                                                                                                                                                                | PASS — 341 tests (contracts 32, complaint intelligence 14, Lost & Found 31, web 264).                                                                        |
+| `pnpm typecheck`                                                                                                                                                                                                                                                                                                                                           | PASS.                                                                                                                                                        |
+| `pnpm lint`                                                                                                                                                                                                                                                                                                                                                | PASS with existing warnings; image optimization, unrelated any/unused args, and next lint deprecation remain.                                                |
+| `NEXT_TELEMETRY_DISABLED=1 pnpm build`                                                                                                                                                                                                                                                                                                                     | PASS with image optimization warnings.                                                                                                                       |
+| `supabase migration list --local`                                                                                                                                                                                                                                                                                                                          | PASS; lifecycle migration applied. The CLI table's “Remote” column in this --local invocation refers to the local queried database, not a hosted connection. |
+| `supabase db lint --local`                                                                                                                                                                                                                                                                                                                                 | PASS — no schema errors.                                                                                                                                     |
+| Local catalog/readback query                                                                                                                                                                                                                                                                                                                               | PASS — history/RPCs present, lifecycle execute grants anon=false/authenticated=false/service_role=true, no phase6 injection constraints remain.              |
+| `git diff --check`                                                                                                                                                                                                                                                                                                                                         | PASS.                                                                                                                                                        |
+
+### Fixture and runtime cleanup
+
+- Only six fictional seeded identities were used. Student B's active state was
+  restored. Canonical auth/profile links created by the supported login path remain
+  in the disposable local database.
+- Ten fictional complaint records and 14 history entries remain as acceptance data;
+  they are not production data. No database reset was used to hide a failure.
+- Exact upload files created by these scripts were removed after byte/missing-file
+  checks. Existing six tracked legacy images were untouched. Some retained fictional
+  complaint rows reference deliberately removed test uploads; this is not a storage
+  durability result.
+- Temporary diagnostics were kept outside the workspace, printed only check labels,
+  and are removed after final verification. Private server logs are not copied into
+  repository evidence.
+
+### Next safe actions
+
+1. Complete the blocked browser multi-user walkthrough, including the global count
+   badge and visible-versus-global peer count wording. Do not call HTTP page health
+   browser E2E.
+2. The UI count concern was subsequently fixed before integration: the badge uses
+   authoritative `similar_count`, and group/modal counts describe only permitted
+   rows. Two pure-model regressions passed; actual browser rendering remains unverified.
+3. Keep local-only env in place and keep secrets out of commits. Hosted Supabase was
+   not part of Phase 6B; no hosted acceptance result is claimed.
+4. The user subsequently explicitly authorized committing the fixes/warning cleanup
+   and merging `feature/lost-found-workflow` into local `main`, without pushing.
+   Earlier no-commit statements above describe the acceptance phase before that
+   authorization, not a denial of the later integration request.
+
+### Authorized integration preparation
+
+- UI image warnings were resolved with `next/image`, using `unoptimized` for direct
+  authenticated/blob/base64 rendering rather than introducing optimizer requests.
+- Local-store/worker `any` and unused-argument warnings were removed with explicit
+  domain types. Typed pg-boss dispatch adapts fetched job arrays and `data` to domain
+  jobs, preserving metadata and propagating processing errors for retry. Two mocked
+  dispatch regressions passed; no live worker job was dispatched.
+- The web lint script now uses the installed ESLint supported API with existing
+  rules/coverage, avoiding the deprecated `next lint` and legacy CLI entrypoint.
+  No lint rules were disabled to make checks green.
+- `pnpm lint`: PASS, no warnings/deprecation messages.
+- `pnpm test`: PASS, **345 tests** (contracts 32, complaint intelligence 14,
+  Lost & Found 31, web 268).
+- `pnpm typecheck`: PASS.
+- `pnpm build`: PASS, no source/lint warnings. The first changed-cache rebuild emitted
+  two Webpack serialization performance advisories; this is not disguised as a
+  fully warning-free cold-build guarantee.
+- Browser E2E remains BLOCKED/NOT RUN. Integration and clean-tree checks are recorded
+  separately after the local merge.

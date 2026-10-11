@@ -49,7 +49,7 @@ export async function POST(req: NextRequest) {
         { status: 400 },
       );
     }
-    console.error("Image upload failed:", error instanceof Error ? error.message : "unknown error");
+    console.error("Image upload failed.");
     return NextResponse.json(
       {
         success: false,

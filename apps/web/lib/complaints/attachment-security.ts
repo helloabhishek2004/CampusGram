@@ -2,16 +2,18 @@ import {
   createCipheriv,
   createDecipheriv,
   createHash,
+  createHmac,
   randomBytes,
   randomUUID,
 } from "node:crypto";
-import { access, mkdir, stat, writeFile } from "node:fs/promises";
+import { constants } from "node:fs";
+import { mkdir, open, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ComplaintAttachment } from "@smart-campus/contracts";
 
 export const COMPLAINT_ATTACHMENT_UPLOAD_DIR = path.join(
   process.cwd(),
-  "public",
+  ".data",
   "uploads",
   "complaints",
 );
@@ -46,6 +48,7 @@ export class ComplaintAttachmentSecurityError extends Error {
       | "FILE_TOO_LARGE"
       | "INVALID_FILE_SIGNATURE"
       | "INVALID_ATTACHMENT_REFERENCE"
+      | "ATTACHMENT_FORBIDDEN"
       | "ATTACHMENT_NOT_FOUND",
   ) {
     super(message);
@@ -53,15 +56,29 @@ export class ComplaintAttachmentSecurityError extends Error {
   }
 }
 
-// A deployment can provide a stable server-only secret. The process-local
-// fallback keeps the existing local/demo storage usable without adding a
-// required environment variable; references are intentionally invalidated on
-// process restart in that mode.
-const processLocalTokenSecret = randomBytes(32);
+// Share the offline fallback across Next route bundles and hot reloads in the
+// same process. Stable configured secrets are required across processes/restarts.
+const offlineSecretKey = Symbol.for("smart-campus.complaint-attachment.offline-secret.v1");
+const offlineSecretStore = globalThis as typeof globalThis & {
+  [offlineSecretKey]?: Buffer;
+};
 
 function tokenKey() {
+  const dedicatedSecret = process.env.COMPLAINT_ATTACHMENT_TOKEN_SECRET;
+  if (dedicatedSecret) {
+    // Preserve the existing dedicated-secret key derivation and precedence.
+    return createHash("sha256").update(dedicatedSecret).digest();
+  }
+  const authSecret = process.env.AUTH_SESSION_SECRET?.trim();
+  if (authSecret) {
+    // Derive an attachment-only key; never reuse the session-signing key itself.
+    return createHmac("sha256", authSecret)
+      .update("smart-campus:complaint-attachment-token:v1")
+      .digest();
+  }
+  const offlineSecret = offlineSecretStore[offlineSecretKey] ??= randomBytes(32);
   return createHash("sha256")
-    .update(process.env.COMPLAINT_ATTACHMENT_TOKEN_SECRET || processLocalTokenSecret)
+    .update(offlineSecret)
     .digest();
 }
 
@@ -178,6 +195,7 @@ export function createComplaintAttachmentToken(input: {
 function decodeComplaintAttachmentToken(token: string): AttachmentTokenPayload | null {
   try {
     const encoded = decodeTokenPart(token);
+    if (encodeTokenPart(encoded) !== token) return null;
     if (encoded.length <= TOKEN_IV_BYTES + TOKEN_TAG_BYTES) return null;
     const iv = encoded.subarray(0, TOKEN_IV_BYTES);
     const tag = encoded.subarray(TOKEN_IV_BYTES, TOKEN_IV_BYTES + TOKEN_TAG_BYTES);
@@ -215,6 +233,73 @@ function attachmentFilePath(token: string, extension: string) {
   return candidate;
 }
 
+function resolveComplaintAttachmentReference(url: string) {
+  const match = ATTACHMENT_URL_PATTERN.exec(url);
+  if (!match || match[0] !== url || path.basename(url).length > 255) {
+    throw new ComplaintAttachmentSecurityError(
+      "Attachments must reference an image issued by the complaint upload endpoint.",
+      "INVALID_ATTACHMENT_REFERENCE",
+    );
+  }
+  const payload = decodeComplaintAttachmentToken(match[1]);
+  if (!payload || payload.extension !== match[2]) {
+    throw new ComplaintAttachmentSecurityError(
+      "Attachment reference does not match an issued image.",
+      "INVALID_ATTACHMENT_REFERENCE",
+    );
+  }
+  return { payload, filePath: attachmentFilePath(match[1], match[2]) };
+}
+
+/** Reads private bytes only after token verification and server-derived authorization. */
+export async function readComplaintAttachment(
+  filename: string,
+  viewer: { userId: string; canViewAll: boolean },
+) {
+  const { payload, filePath } = resolveComplaintAttachmentReference(
+    `/uploads/complaints/${filename}`,
+  );
+  if (payload.ownerId !== viewer.userId && !viewer.canViewAll) {
+    throw new ComplaintAttachmentSecurityError(
+      "You do not have permission to view this attachment.",
+      "ATTACHMENT_FORBIDDEN",
+    );
+  }
+
+  try {
+    // Never follow a file symlink outside the private upload directory.
+    const file = await open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
+    try {
+      const fileStat = await file.stat();
+      if (!fileStat.isFile()) {
+        throw new ComplaintAttachmentSecurityError(
+          "The referenced attachment is not an image file.",
+          "INVALID_ATTACHMENT_REFERENCE",
+        );
+      }
+      assertComplaintAttachmentSize(fileStat.size);
+      const buffer = await file.readFile();
+      assertComplaintAttachmentSize(buffer.length);
+      if (buffer.length !== fileStat.size) {
+        throw new ComplaintAttachmentSecurityError(
+          "The stored attachment has changed.",
+          "INVALID_ATTACHMENT_REFERENCE",
+        );
+      }
+      validateImageBytes(buffer, payload.mimeType);
+      return { buffer, mimeType: payload.mimeType };
+    } finally {
+      await file.close();
+    }
+  } catch (error) {
+    if (error instanceof ComplaintAttachmentSecurityError) throw error;
+    throw new ComplaintAttachmentSecurityError(
+      "The referenced complaint attachment is unavailable.",
+      "ATTACHMENT_NOT_FOUND",
+    );
+  }
+}
+
 /**
  * Validates a generated local reference and binds it to the current owner.
  * External URLs and ordinary root-relative paths deliberately do not pass.
@@ -223,18 +308,8 @@ export async function validateComplaintAttachmentReference(
   attachment: ComplaintAttachment,
   ownerId: string,
 ): Promise<ComplaintAttachment> {
-  const match = ATTACHMENT_URL_PATTERN.exec(attachment.url);
-  if (!match) {
-    throw new ComplaintAttachmentSecurityError(
-      "Attachments must reference an image issued by the complaint upload endpoint.",
-      "INVALID_ATTACHMENT_REFERENCE",
-    );
-  }
-
-  const token = match[1];
-  const extension = match[2];
-  const payload = decodeComplaintAttachmentToken(token);
-  if (!payload || payload.ownerId !== ownerId || payload.extension !== extension) {
+  const { payload, filePath } = resolveComplaintAttachmentReference(attachment.url);
+  if (payload.ownerId !== ownerId) {
     throw new ComplaintAttachmentSecurityError(
       "This attachment was not issued for the authenticated complaint owner.",
       "INVALID_ATTACHMENT_REFERENCE",
@@ -254,7 +329,6 @@ export async function validateComplaintAttachmentReference(
     );
   }
 
-  const filePath = attachmentFilePath(token, extension);
   let fileStat;
   try {
     fileStat = await stat(filePath);
@@ -280,7 +354,7 @@ export async function validateComplaintAttachmentReference(
   return {
     ...attachment,
     id: payload.attachmentId,
-    url: `/uploads/complaints/${token}.${extension}`,
+    url: attachment.url,
     mime_type: payload.mimeType,
   };
 }

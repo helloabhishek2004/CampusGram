@@ -381,10 +381,14 @@ export async function updateComplaintLifecycle(input: {
       },
     );
     if (error) {
-      const prefix = error.message.includes("Invalid complaint status transition")
-        ? "Cannot transition complaint"
-        : "Complaint persistence failed";
-      throw new ComplaintLifecycleError(`${prefix}: ${error.message}`, prefix.startsWith("Cannot") ? "INVALID_TRANSITION" : "PERSISTENCE_FAILED");
+      const invalidTransition = error.message.includes("Invalid complaint status transition");
+      // Lifecycle errors are returned by PATCH; never include backend details.
+      throw new ComplaintLifecycleError(
+        invalidTransition
+          ? "Cannot transition complaint to the requested status."
+          : "Unable to save the complaint update. Please try again.",
+        invalidTransition ? "INVALID_TRANSITION" : "PERSISTENCE_FAILED",
+      );
     }
 
     const refreshed = await getComplaints("all", {

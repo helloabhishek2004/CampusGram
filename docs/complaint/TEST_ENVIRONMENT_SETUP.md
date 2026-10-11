@@ -50,11 +50,11 @@ version 17 and local storage/realtime/auth services.
 
 ## 2. Application environment
 
-Create an ignored local environment file from the template if one does not already
-exist:
+Create the ignored **web app** environment file from the template only if it does
+not already exist; never overwrite an existing private file blindly:
 
 ```bash
-cp .env.example .env.local
+test -e apps/web/.env.local || cp .env.example apps/web/.env.local
 ```
 
 For a deterministic local complaint run, use these non-secret settings:
@@ -68,8 +68,15 @@ NEXT_PUBLIC_APP_URL=http://localhost:3000
 
 Set `NEXT_PUBLIC_SUPABASE_URL` and `NEXT_PUBLIC_SUPABASE_ANON_KEY` from the local
 Supabase CLI output, and set a long random server-only `AUTH_SESSION_SECRET` in
-`.env.local`. If the application also requires a server-side Supabase key, use the
-local service-role value from the CLI output. Never commit or report those values.
+`apps/web/.env.local`. The configured mock institutional/profile persistence path
+also requires the local service-role key. Never commit or report those values.
+
+Next.js 15.5.27 was verified using its installed `@next/env.loadEnvConfig` without
+starting the app. Process-exported variables take precedence over the app's
+environment files; then `.env.development.local`, `.env.local`,
+`.env.development`, `.env` are checked inside `apps/web`. Root `.env.local` is not
+loaded by the documented filtered web command. Recheck the effective in-memory
+environment before acceptance if files or shell exports change.
 
 The mock OTP is `123456`. It is for local/demo acceptance only; it is not a real
 SMS or Supabase Auth credential.
@@ -89,10 +96,12 @@ the service state locally without copying the output into a report:
 supabase status
 ```
 
-Reset the disposable database so migrations and configured seed files run in order:
+Only for an explicitly intended fresh local environment, reset the disposable
+database so migrations and configured seed files run in order. Do not reset an
+already-prepared acceptance stack merely to rerun tests:
 
 ```bash
-supabase db reset
+supabase db reset --local
 ```
 
 The seed configuration runs `supabase/seed/seed.sql` followed by
@@ -218,9 +227,15 @@ or real incident descriptions.
 2. Upload valid JPEG, PNG, WebP, and GIF bytes with matching declared MIME types.
 3. Reject forged signatures, unsupported MIME types, oversized files, external URLs,
    unissued root-relative paths, and another owner's attachment reference.
-4. Restart the web process and document the existing local filesystem/token
-   limitation: local complaint attachments are demo storage, not durable production
-   storage.
+4. New uploads use ignored `apps/web/.data/uploads/complaints`, with the public-shaped
+   URL rewritten before static lookup to an owner/staff-authorized read route. Test
+   anonymous and cross-owner byte reads as well as reference reuse. Keep the updated
+   Next configuration loaded before testing.
+5. Local files are not durable production storage. A dedicated attachment secret or
+   domain-separated configured auth-secret fallback stabilizes tokens across route
+   bundles; the offline process-global fallback still invalidates on process restart.
+   Legacy public uploads are not automatically migrated or deleted and are rejected
+   through the authorized complaint URL namespace.
 
 ## 7. Repository-level checks
 
@@ -254,10 +269,14 @@ server, or an isolated test identity was unavailable.
 
 ## 8. Cleanup and reset
 
-After acceptance, remove only disposable local state:
+Remove only exact files/rows created by the current fixture run, where intended.
+Keep pre-existing data and images. The Phase 6B walkthrough removed its own uploads
+and temporary constraints but retained clearly fictional complaint/history rows for
+inspection. Do not use a reset as routine acceptance cleanup. If the owner separately
+intends to destroy all local test data, use only the local reset option:
 
 ```bash
-supabase db reset
+supabase db reset --local
 supabase stop
 ```
 
@@ -291,7 +310,7 @@ until a separate hosted target is explicitly confirmed as isolated and disposabl
 ## 10. Known limitations
 
 - The mock OTP flow is not a production authentication provider.
-- Local complaint attachment storage uses the existing filesystem/demo adapter and
+- Local complaint attachment storage uses a private filesystem/demo adapter and
   is not durable across an ephemeral deployment.
 - The standalone Module 2 analyzer is not the canonical complaint submission path;
   submission uses deterministic lexical clustering.

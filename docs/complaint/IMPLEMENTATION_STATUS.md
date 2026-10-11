@@ -2,7 +2,11 @@
 
 **Date:** 2026-10-09  
 **Scope:** Safe local implementation of the Complaint System Phase 2 plan.  
-**Live verification:** Not performed. No Supabase migration or runtime data mutation was executed.
+**Phase 2 verification:** No live Supabase mutation was performed during Phase 2.
+**Latest local verification (2026-10-11):** Phase 6B executed local Supabase-backed
+authentication, ownership, five-owner aggregation, lifecycle/history, safe rollback,
+and attachment acceptance. See `ACCEPTANCE_REPORT.md` for precise results and fixes.
+Hosted Supabase and browser E2E remain unverified; the browser tool timed out.
 
 ## Outcome
 
@@ -23,17 +27,17 @@ Institutional ID
 
 ## Audit findings addressed
 
-| Audit finding | Phase 2 result |
-| --- | --- |
-| P1-02 — Configured OTP/session mismatch | `resolveServerIdentity()` now treats the signed application cookie as authoritative in explicit mock mode, even when Supabase URL/key are configured. Real Supabase mode requires a canonical `institutional_users.linked_profile_id`; metadata alone is not authorization. |
-| P1-03 — Viewer-scoped emergency counts | Repository computes cluster counts/status and summary counts from the full authoritative dataset before applying a student's owner-only row projection. Student API responses omit raw ownership actor IDs. |
-| P1-01 — Lifecycle stops at submitted | Added authorized `PATCH /api/complaints/[id]`, transition validation, take-ownership support, response/resolution notes, staff queue access through the existing list route, and status history persistence design. |
-| P2-01/P3-03 — Misleading AI wording | Submission UI now says deterministic text similarity/grouping rather than AI similarity. Module 2 provenance and standalone behavior are truthful. |
-| P2-03 — Non-atomic emergency write | Added an additive service-role RPC migration that atomically cascades existing cluster rows and inserts the new complaint. It is pending application to the configured database. |
-| P2-05 — Unverified attachments | Uploads now require JPEG/PNG/WebP/GIF magic-byte agreement, use safe generated filenames, bind opaque references to the authenticated owner, and reject arbitrary external/root-relative references. Local disk remains demo storage. |
-| P2-06 — Runtime response validation | Supabase rows and complaint API records are parsed through shared Zod schemas at the repository/API boundaries. |
-| P2-08 — Intelligence provenance/demo candidates | Explicit Gemini without a key fails closed; model output/error fragments are sanitized; model cluster matches are recomputed from explicitly supplied candidates; default demo candidates are removed. |
-| P3-01 — Empty analysis IDs | Module 2 validation now rejects empty `complaint_id` values without changing the shared contract shape. |
+| Audit finding                                   | Phase 2 result                                                                                                                                                                                                                                                              |
+| ----------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| P1-02 — Configured OTP/session mismatch         | `resolveServerIdentity()` now treats the signed application cookie as authoritative in explicit mock mode, even when Supabase URL/key are configured. Real Supabase mode requires a canonical `institutional_users.linked_profile_id`; metadata alone is not authorization. |
+| P1-03 — Viewer-scoped emergency counts          | Repository computes cluster counts/status and summary counts from the full authoritative dataset before applying a student's owner-only row projection. Student API responses omit raw ownership actor IDs.                                                                 |
+| P1-01 — Lifecycle stops at submitted            | Added authorized `PATCH /api/complaints/[id]`, transition validation, take-ownership support, response/resolution notes, staff queue access through the existing list route, and status history persistence design.                                                         |
+| P2-01/P3-03 — Misleading AI wording             | Submission UI now says deterministic text similarity/grouping rather than AI similarity. Module 2 provenance and standalone behavior are truthful.                                                                                                                          |
+| P2-03 — Non-atomic emergency write              | Added an additive service-role RPC migration that atomically cascades existing cluster rows and inserts the new complaint. It is pending application to the configured database.                                                                                            |
+| P2-05 — Unverified attachments                  | Uploads now require JPEG/PNG/WebP/GIF magic-byte agreement, use safe generated filenames, bind opaque references to the authenticated owner, and reject arbitrary external/root-relative references. Local disk remains demo storage.                                       |
+| P2-06 — Runtime response validation             | Supabase rows and complaint API records are parsed through shared Zod schemas at the repository/API boundaries.                                                                                                                                                             |
+| P2-08 — Intelligence provenance/demo candidates | Explicit Gemini without a key fails closed; model output/error fragments are sanitized; model cluster matches are recomputed from explicitly supplied candidates; default demo candidates are removed.                                                                      |
+| P3-01 — Empty analysis IDs                      | Module 2 validation now rejects empty `complaint_id` values without changing the shared contract shape.                                                                                                                                                                     |
 
 ## Files changed
 
@@ -105,11 +109,17 @@ No live Supabase, RLS, browser E2E, two-user deployment, or migration-applicatio
 
 ## Remaining limitations and blockers
 
-1. The new migration/RPC has not been applied to or tested against live Supabase. The configured persistence path will require migration application before lifecycle/atomic-create behavior works there.
-2. Local/demo complaint attachments still use `public/uploads/complaints`; they are not durable in serverless/ephemeral hosting. `COMPLAINT_ATTACHMENT_TOKEN_SECRET` is not required for the local process fallback, so references issued without a configured secret are invalidated on restart.
+1. The lifecycle migration/RPC is applied and tested on local Supabase, including
+   safe rollback failure injection. Hosted deployment is not verified and must not
+   be mutated without separate authorization.
+2. New local/demo complaint attachments use private `.data/uploads/complaints` storage (relative to the web app), not the Next.js public directory. The existing `/uploads/complaints/[filename]` URL is rewritten in Next's `beforeFiles` phase to the authenticated, dynamic `/api/complaints/attachments/[filename]` GET handler, before any public static asset lookup. The handler uses `resolveServerIdentity()` and `canManageComplaints()`: only the token-bound owner or authorized complaint staff can read verified private image bytes. All handler responses are `private, no-store`; invalid tokens, filename/extension mismatches, missing files, invalid image bytes, and file symlinks fail closed. Existing public uploads are not moved, deleted, or migrated: legacy unsupported/unissued `.jpeg` references return 401 anonymously or 404 when authenticated rather than exposing static bytes through the complaint URL namespace. This does not restore legacy owner access. The rewrite requires the active server to load the updated Next configuration; independently hosted static copies need separate operator review. Local disk is not durable in serverless/ephemeral hosting. Attachment keys prefer server-only `COMPLAINT_ATTACHMENT_TOKEN_SECRET` with its existing derivation; otherwise they use a domain-separated HMAC-SHA256 derivation from `AUTH_SESSION_SECRET`. Neither configured secret is required offline: a random process-global fallback is shared across route bundles/module reloads, but does not survive a process restart or work across separate processes. Stable configured secrets must agree across instances; changing the effective key invalidates previously issued references. The token format, AES-256-GCM encryption, and signed authentication session are unchanged.
 3. Cluster assignment remains read/match based and can race under concurrent submissions. The new persistence RPC prevents cascade/insert partial state but does not serialize JavaScript similarity assignment.
 4. No complaint notification delivery, email/SMS/push acknowledgement, or external queue was introduced.
-5. Browser E2E, two-user live authorization, RLS behavior, migration application, and deployment persistence remain unverified.
+5. Local API multi-user authorization and migration/RPC behavior are verified.
+   Browser E2E, authenticated-JWT RLS, concurrency/replay behavior, and hosted
+   deployment persistence remain unverified. The owner UI emergency count was fixed
+   to use global `similar_count`, with two model regressions; browser rendering is
+   still unverified.
 6. The existing Module 2 analyzer remains a standalone capability; the core complaint submission path intentionally remains deterministic lexical clustering.
 
 ## Manual acceptance steps still required

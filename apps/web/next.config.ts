@@ -9,6 +9,19 @@ const nextConfig: NextConfig = {
     "@smart-campus/utils",
   ],
   reactStrictMode: true,
+  async rewrites() {
+    return {
+      // Run before public-file lookup so legacy evidence cannot bypass auth.
+      beforeFiles: [
+        {
+          source: "/uploads/complaints/:filename",
+          destination: "/api/complaints/attachments/:filename",
+        },
+      ],
+      afterFiles: [],
+      fallback: [],
+    };
+  },
 };
 
 export default nextConfig;

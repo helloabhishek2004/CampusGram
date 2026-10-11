@@ -2,6 +2,7 @@
 
 import React, { useState, useEffect, useRef, useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { AppShell } from "@/components/layout/app-shell";
 import {
   Button,
@@ -35,6 +36,7 @@ import {
   ShieldAlert,
 } from "lucide-react";
 import { cn } from "@smart-campus/utils";
+import { complaintGroupCounts } from "@/lib/complaints/group-counts";
 
 export default function ComplaintsPage() {
   // Form State
@@ -187,7 +189,7 @@ export default function ComplaintsPage() {
 
       return {
         clusterId,
-        count: items.length,
+        ...complaintGroupCounts(items),
         category: latest.category,
         latestDate: latest.created_at,
         latestReport: latest,
@@ -446,9 +448,11 @@ export default function ComplaintsPage() {
                     ) : (
                       <div className="relative border border-border rounded-lg p-2 bg-muted/30">
                         <div className="relative h-32 w-full overflow-hidden rounded bg-muted flex items-center justify-center">
-                          <img
+                          <Image
                             src={previewUrl}
                             alt="Attachment preview"
+                            fill
+                            unoptimized
                             className="h-full w-full object-cover"
                           />
                         </div>
@@ -656,9 +660,11 @@ export default function ComplaintsPage() {
                               onClick={() => setExpandedImage(cluster.thumbnailUrl || null)}
                               className="group relative h-20 w-28 rounded-lg overflow-hidden border border-border bg-muted cursor-pointer hover:opacity-90"
                             >
-                              <img
+                              <Image
                                 src={cluster.thumbnailUrl}
                                 alt={cluster.category ? `Evidence photo for ${cluster.category.replace("_", " ")} cluster` : "Complaint cluster evidence thumbnail"}
+                                fill
+                                unoptimized
                                 className="h-full w-full object-cover"
                               />
                               <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[10px] font-medium">
@@ -679,14 +685,14 @@ export default function ComplaintsPage() {
 
                         <div className="flex items-center gap-2">
                           <span className="font-bold px-2 py-0.5 rounded text-[10px] bg-destructive/20 text-destructive border border-destructive/30 font-mono">
-                            {cluster.count} matching reports
+                            {cluster.globalCount} matching reports
                           </span>
 
                           <button
                             onClick={() => setSelectedCluster({ clusterId: cluster.clusterId, items: cluster.items })}
                             className="text-xs px-2.5 py-1 rounded-lg text-destructive border border-destructive/30 bg-destructive/10 hover:bg-destructive/20 transition-colors font-medium"
                           >
-                            Inspect Group ({cluster.count}) &rarr;
+                            Inspect Group ({cluster.visibleCount} visible) &rarr;
                           </button>
                         </div>
                       </CardFooter>
@@ -764,9 +770,11 @@ export default function ComplaintsPage() {
                                   onClick={() => setExpandedImage(att.url)}
                                   className="group relative h-16 w-24 rounded-lg overflow-hidden border border-border bg-muted cursor-pointer hover:opacity-90"
                                 >
-                                  <img
+                                  <Image
                                     src={att.url}
                                     alt={att.filename || "Attachment"}
+                                    fill
+                                    unoptimized
                                     className="h-full w-full object-cover"
                                   />
                                   <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[9px]">
@@ -895,7 +903,7 @@ export default function ComplaintsPage() {
                       <Flame className="w-3 h-3 text-destructive" /> EMERGENCY CLUSTER
                     </span>
                     <h3 id="cluster-dialog-title" className="font-semibold text-foreground text-sm">
-                      {selectedCluster.items.length} Reports Registered
+                      {selectedCluster.items.length} Reports Visible to You
                     </h3>
                   </div>
                   <p className="text-xs text-muted-foreground font-mono truncate max-w-md">
@@ -917,7 +925,7 @@ export default function ComplaintsPage() {
                 <div className="text-xs text-amber-700 dark:text-amber-300 bg-amber-500/10 border border-amber-500/30 rounded-lg p-2.5 flex items-start gap-2">
                   <AlertTriangle className="w-4 h-4 text-amber-500 shrink-0 mt-0.5" />
                   <span>
-                    Reports below matched with lexical text similarity &ge; 0.35 and were aggregated into this emergency incident group.
+                    Only reports you are permitted to view are shown below. The matching-report badge reflects the global group count.
                   </span>
                 </div>
 
@@ -951,9 +959,11 @@ export default function ComplaintsPage() {
                             onClick={() => setExpandedImage(att.url)}
                             className="group relative h-16 w-24 rounded-lg border border-border bg-muted overflow-hidden cursor-pointer"
                           >
-                            <img
+                            <Image
                               src={att.url}
                               alt={att.filename || "Attachment"}
+                              fill
+                              unoptimized
                               className="h-full w-full object-cover"
                             />
                             <div className="absolute inset-0 bg-black/40 opacity-0 group-hover:opacity-100 transition-opacity flex items-center justify-center text-white text-[9px]">
@@ -1002,10 +1012,13 @@ export default function ComplaintsPage() {
               >
                 <X className="w-4 h-4" />
               </button>
-              <img
+              <Image
                 src={expandedImage}
                 alt="Enlarged view of complaint evidence attachment"
-                className="max-h-[80vh] w-auto object-contain rounded-lg"
+                width={1200}
+                height={800}
+                unoptimized
+                className="max-h-[80vh] max-w-full h-auto w-auto object-contain rounded-lg"
               />
             </div>
           </div>
