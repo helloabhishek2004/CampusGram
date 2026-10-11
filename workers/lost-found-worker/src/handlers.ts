@@ -3,6 +3,13 @@ import { logger } from "./logger";
 import { LostFoundAIServiceClient, calculateMatchScore, readDb, writeDb } from "@smart-campus/lost-and-found";
 import { randomUUID } from "crypto";
 import { createClient } from "@supabase/supabase-js";
+import type { LostFoundItem } from "@smart-campus/contracts";
+
+// The compatibility store persists rows separately from the API's images array.
+type LocalItemRow = Omit<LostFoundItem, "images"> & {
+  text_embedding?: number[];
+  primary_image_embedding?: number[];
+};
 
 const aiClient = new LostFoundAIServiceClient();
 
@@ -83,7 +90,8 @@ export async function handleProcessItem(job: BaseJob<ProcessItemPayload>): Promi
   }
 
   const db = readDb();
-  const item = db.lost_found_items.find((i: any) => i.id === itemId);
+  const items: LocalItemRow[] = db.lost_found_items;
+  const item = items.find((i) => i.id === itemId);
   
   if (item) {
       item.text_embedding = aiResult.textEmbedding;
@@ -103,7 +111,7 @@ export async function handleProcessItem(job: BaseJob<ProcessItemPayload>): Promi
 
   // Find candidates (simple mock cosine distance calculation for local DB)
   const targetType = type === 'lost' ? 'found' : 'lost';
-  const candidates = db.lost_found_items.filter((i: any) => i.type === targetType && i.status === 'open' && i.text_embedding);
+  const candidates = items.filter((i) => i.type === targetType && i.status === 'open' && i.text_embedding);
 
   const cosine = (a: number[] | undefined, b: number[] | undefined) => {
       if (!a?.length || !b?.length || a.length !== b.length) return 0;
@@ -163,7 +171,7 @@ export async function handleProcessItem(job: BaseJob<ProcessItemPayload>): Promi
   writeDb(db);
 }
 
-export async function handleExplainMatch(job: BaseJob<ExplainMatchPayload>): Promise<void> {}
-export async function handleSendNotification(job: BaseJob<SendNotificationPayload>): Promise<void> {}
+export async function handleExplainMatch(_job: BaseJob<ExplainMatchPayload>): Promise<void> {}
+export async function handleSendNotification(_job: BaseJob<SendNotificationPayload>): Promise<void> {}
 export async function handleExpireItems(): Promise<void> {}
 export async function handleCloseContactWindows(): Promise<void> {}

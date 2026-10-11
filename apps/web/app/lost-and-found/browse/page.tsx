@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, useMemo } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { format } from "date-fns";
 import { AppShell } from "@/components/layout/app-shell";
 import {
@@ -199,9 +200,11 @@ export default function BrowseItemsPage() {
                   <div>
                     <div className="h-44 bg-muted/50 flex items-center justify-center text-muted-foreground relative overflow-hidden border-b border-border">
                       {item.images && item.images.length > 0 && item.images[0].public_url ? (
-                        <img
+                        <Image
                           src={item.images[0].public_url}
                           alt={item.title}
+                          fill
+                          unoptimized
                           onError={(e) => {
                             // Graceful fallback on broken image link
                             (e.currentTarget as HTMLElement).style.display = "none";

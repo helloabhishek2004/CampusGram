@@ -2,6 +2,7 @@
 
 import React, { Suspense, useEffect, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useSearchParams } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import { Button } from "@smart-campus/ui";
@@ -81,7 +82,7 @@ function SuccessContent() {
           </div>
           <div className="bg-card border border-border rounded-xl overflow-hidden">
             <div className="bg-muted/40 px-4 py-2.5 border-b border-border flex items-center gap-1.5 text-xs text-foreground font-medium"><Package className="w-3.5 h-3.5 text-muted-foreground" /> Candidate Item Preview</div>
-            {match.matchedItem?.images?.[0]?.public_url && <div className="h-44 bg-muted/40 overflow-hidden"><img src={match.matchedItem.images[0].public_url} alt={match.matchedItem.title} className="w-full h-full object-cover" /></div>}
+            {match.matchedItem?.images?.[0]?.public_url && <div className="relative h-44 bg-muted/40 overflow-hidden"><Image src={match.matchedItem.images[0].public_url} alt={match.matchedItem.title} fill unoptimized className="w-full h-full object-cover" /></div>}
             <div className="p-4 space-y-2">
               <h3 className="font-semibold text-foreground text-sm">{match.matchedItem?.title}</h3>
               <p className="text-muted-foreground text-xs leading-relaxed">{match.matchedItem?.public_description}</p>

@@ -2,6 +2,7 @@
 
 import React, { useEffect, useRef, useState } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { useRouter } from "next/navigation";
 import { AppShell } from "@/components/layout/app-shell";
 import {
@@ -131,9 +132,11 @@ export default function ReportLostItemPage() {
                         key={i}
                         className="relative w-24 h-24 shrink-0 rounded-lg overflow-hidden border border-border bg-muted"
                       >
-                        <img
+                        <Image
                           src={f.preview}
                           alt={f.file?.name ? `Lost item photo preview: ${f.file.name}` : `Lost item photo preview ${i + 1}`}
+                          fill
+                          unoptimized
                           className="w-full h-full object-cover"
                         />
                         <button

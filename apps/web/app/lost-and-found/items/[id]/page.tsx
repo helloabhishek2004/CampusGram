@@ -2,6 +2,7 @@
 
 import React, { useEffect, useState, use } from "react";
 import Link from "next/link";
+import Image from "next/image";
 import { format } from "date-fns";
 import { AppShell } from "@/components/layout/app-shell";
 import {
@@ -139,10 +140,12 @@ export default function ItemDetailPage({ params }: { params: Promise<{ id: strin
             </div>
 
             {item.images?.length > 0 ? (
-              <div className="aspect-video bg-muted/40 rounded-xl overflow-hidden border border-border">
-                <img
+              <div className="relative aspect-video bg-muted/40 rounded-xl overflow-hidden border border-border">
+                <Image
                   src={item.images[0].public_url}
                   alt={item.title}
+                  fill
+                  unoptimized
                   className="w-full h-full object-cover"
                 />
               </div>

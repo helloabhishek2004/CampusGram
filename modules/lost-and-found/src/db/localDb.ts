@@ -39,6 +39,6 @@ export const readDb = () => {
     return JSON.parse(fs.readFileSync(DB_PATH, 'utf-8'));
 };
 
-export const writeDb = (data: any) => {
+export const writeDb = (data: Record<string, unknown[]>) => {
     fs.writeFileSync(DB_PATH, JSON.stringify(data, null, 2));
 };
