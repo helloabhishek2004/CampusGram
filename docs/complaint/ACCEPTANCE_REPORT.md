@@ -479,3 +479,55 @@ The existing attachment-storage assertion was updated to enforce non-public stor
   fully warning-free cold-build guarantee.
 - Browser E2E remains BLOCKED/NOT RUN. Integration and clean-tree checks are recorded
   separately after the local merge.
+
+## Local main integration receipt — 2026-10-11
+
+The user explicitly authorized committing the acceptance fixes/warning cleanup and
+integrating the feature branch into **local main**, without pushing.
+
+### Preserved history and conflict resolution
+
+- Feature fixes committed as `8c8f19e` (complaint acceptance/security), `95896a4`
+  (warning cleanup/typed worker), and `1d33b3a` (metadata whitespace normalization).
+- `git switch main` followed by `git merge --ff-only feature/lost-found-workflow`
+  preserved the full feature history, including pre-existing commit `9d5379e` and
+  its migration renames and shared/module work.
+- `git fetch origin` found upstream main commit `f100630` (PWA, icons/branding,
+  offline mock-auth changes, dependency additions). It was not overwritten or lost.
+- `git merge --no-commit origin/main` reported 14 content conflicts. They were
+  resolved manually, preserving local complaint privacy/lifecycle/global-count
+  behavior and theme/layout alongside incoming PWA/branding/auth work.
+- Incoming logo images were converted to `next/image` rather than suppressing
+  warnings. Requirements preserve `requests` and Pillow plus existing constraints.
+  The additional upstream mock-OTP regression is retained.
+- Merge completed as **`5293f23` — `chore: merge upstream main with verified campus workflows`**.
+- No resets, stashes, force operations, branch deletion, or pushes occurred.
+
+### Final combined-tree verification
+
+| Command/check                                  | Result                                                                                                                                                                                                                                         |
+| ---------------------------------------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| Installed Next `@next/env` gate on merged tree | PASS; effective local URL and keys still match local status; mock providers/local app URL preserved.                                                                                                                                           |
+| `pnpm lint`                                    | PASS — no warnings or deprecation output.                                                                                                                                                                                                      |
+| `pnpm test`                                    | PASS — **346 tests**: contracts 32, complaint intelligence 14, Lost & Found 31, web 269.                                                                                                                                                       |
+| `NEXT_TELEMETRY_DISABLED=1 pnpm build`         | PASS — latest combined-tree build completed without errors or warnings. Earlier changed-cache performance advisories remain historical evidence, not a guaranteed absence on every future cold build.                                          |
+| `pnpm typecheck`                               | PASS across workspaces.                                                                                                                                                                                                                        |
+| `git diff --check 6eb34bf` / staged diff check | PASS; metadata whitespace from the incoming feature history was normalized without removing content.                                                                                                                                           |
+| `supabase migration list --local`              | PASS; lifecycle migration retained/applied.                                                                                                                                                                                                    |
+| `supabase db lint --local`                     | PASS; no schema errors.                                                                                                                                                                                                                        |
+| Merged app `/login` and `/manifest.json`       | HTTP 200 on `http://localhost:3000`.                                                                                                                                                                                                           |
+| `node /tmp/omnirush/merged-smoke.cjs`          | PASS — 14 live checks plus exact-row cleanup: Student A/B/staff login, upload, create, owner privacy, nonowner detail/read denial, student/staff PATCH, DB/history read-back, existing global threshold, and anonymous legacy evidence denial. |
+
+The merged smoke used the verified local stack only. Its one new complaint/history
+and upload were removed specifically, leaving the earlier fictional acceptance
+fixtures intact. The temporary smoke script was removed. The dev app and local
+Supabase are available for the next browser walkthrough.
+
+**Remaining acceptance gap:** browser E2E is still BLOCKED/NOT RUN. Model tests prove
+the corrected count calculation, not visual layout or interactive browser behavior.
+Authenticated-JWT RLS, concurrent/replayed submissions, real worker dispatch, hosted
+deployment, and production attachment durability are not established by these checks.
+
+**Safety:** hosted Supabase was not contacted or mutated. Private environment files,
+credentials, cookies, and test uploads were not committed. GitHub was read for the
+authorized merge via fetch only; no remote branch was pushed.
