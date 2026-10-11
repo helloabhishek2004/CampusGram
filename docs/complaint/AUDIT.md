@@ -1,7 +1,9 @@
 # CampusGram Complaint Module — Forensic Audit
 
-**Audit date:** 2026-10-09 (Asia/Calcutta)  
-**Scope:** Complaint submission, feed/listing, attachments, complaint detail, Module 2 intelligence, authentication/authorization boundaries, persistence, migrations/RLS, tests, and operational readiness.  
+**Audit date:** 2026-10-09 (Asia/Calcutta)
+
+**Scope:** Complaint submission, feed/listing, attachments, complaint detail, Module 2 intelligence, authentication/authorization boundaries, persistence, migrations/RLS, tests, and operational readiness.
+
 **Method:** Read-only source and documentation inspection plus safe local tests/typecheck/lint/build. No application source, migration, dependency, test, database schema, database policy, or runtime data was modified.
 
 ## 1. Executive summary

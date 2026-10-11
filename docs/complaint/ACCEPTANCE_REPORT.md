@@ -1,8 +1,11 @@
 # CampusGram Complaint System — Phase 3 Acceptance Report
 
-**Date:** 2026-10-10  
-**Branch:** `feature/lost-found-workflow`  
-**Scope:** Phase 3 live-integration and acceptance checks for the Complaint System.  
+**Date:** 2026-10-10
+
+**Branch:** `feature/lost-found-workflow`
+
+**Scope:** Phase 3 live-integration and acceptance checks for the Complaint System.
+
 **Safety boundary:** No migration was applied, no database data was mutated, no browser session was opened, and no secrets/tokens/cookies were printed.
 
 ## Executive result
