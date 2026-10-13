@@ -21,6 +21,10 @@ import {
   Lock,
   ArrowRight,
   Command,
+  HelpCircle,
+  Info,
+  Shield,
+  Scale,
 } from "lucide-react";
 
 export interface CommandItem {
@@ -122,6 +126,44 @@ const COMMAND_ITEMS: CommandItem[] = [
     href: "/settings",
     icon: Settings,
     keywords: ["settings", "preferences", "config", "session"],
+  },
+  {
+    id: "nav-help",
+    title: "Help & Support",
+    description: "Operational guides, module walkthroughs, FAQs, and emergency hotlines",
+    category: "Navigation",
+    href: "/help",
+    icon: HelpCircle,
+    shortcut: "G ?",
+    keywords: ["help", "support", "faq", "guide", "troubleshooting", "hotline", "assistance"],
+  },
+  {
+    id: "nav-about",
+    title: "About CampusGram",
+    description: "Architecture, mission, engineering principles, and core pillars",
+    category: "Navigation",
+    href: "/about",
+    icon: Info,
+    shortcut: "G I",
+    keywords: ["about", "campusgram", "platform", "version", "architecture", "overview"],
+  },
+  {
+    id: "nav-privacy",
+    title: "Privacy Policy",
+    description: "Institutional identity protection, phone masking, and data handling rules",
+    category: "Navigation",
+    href: "/privacy",
+    icon: Shield,
+    keywords: ["privacy", "policy", "security", "gdpr", "masking", "biodata", "confidentiality"],
+  },
+  {
+    id: "nav-terms",
+    title: "Terms of Service",
+    description: "Acceptable use guidelines, account responsibilities, and abuse prohibition",
+    category: "Navigation",
+    href: "/terms",
+    icon: Scale,
+    keywords: ["terms", "service", "acceptable use", "rules", "conduct", "abuse"],
   },
 
   // Module 2 Quick Actions

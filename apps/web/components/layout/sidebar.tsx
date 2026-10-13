@@ -21,6 +21,8 @@ import {
   Search,
   Sun,
   Moon,
+  HelpCircle,
+  Info,
 } from "lucide-react";
 import { Avatar } from "../ui/avatar";
 import { useCampusAuth } from "../auth/auth-guard";
@@ -71,6 +73,8 @@ const MODULE_NAV_ITEMS: NavItem[] = [
 
 const ACCOUNT_NAV_ITEMS: NavItem[] = [
   { name: "Settings", href: "/settings", icon: Settings, shortcut: "G S" },
+  { name: "Help & Support", href: "/help", icon: HelpCircle, shortcut: "G ?" },
+  { name: "About", href: "/about", icon: Info, shortcut: "G I" },
 ];
 
 const FACULTY_NAV_ITEMS: NavItem[] = [

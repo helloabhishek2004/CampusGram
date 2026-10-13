@@ -22,9 +22,10 @@ or unrelated module architecture was replaced.
 
 | Module Stream                         | Owner       | Integration Boundary                              | Current Status                                            |
 | :------------------------------------ | :---------- | :------------------------------------------------ | :-------------------------------------------------------- |
-| **Module 1 (Campus Portal)**          | Developer A | `apps/web/`                                       | Operational; institutional session used by Module 3      |
+| **Module 1 (Campus Portal)**          | Developer A | `apps/web/`                                       | Operational; institutional session used by Module 3 & 4   |
 | **Module 2 (Complaint Intelligence)** | Developer B | `modules/complaint-intelligence`                  | Operational; Public contract `analyzeComplaint` verified  |
 | **Module 3 (Lost & Found)**           | Developer C | `modules/lost-and-found`, `workers/`, `services/` | Integrated hackathon workflow; browser acceptance pending |
+| **Module 4 (Emergency Alert System)** | Developer D | `@smart-campus/contracts`, `apps/web/lib/emergency` | Operational; Realtime polling, lifecycle, audit trail, Supabase live persistence verified |
 
 ---
 
@@ -38,6 +39,18 @@ or unrelated module architecture was replaced.
 - [x] **Live persistence/matching integration**: Hosted Supabase processing path stores embeddings, scores, matches, and events; the score remains a weighted empirical heuristic rather than a probability.
 - [x] **Full Claim & Handover UI**: Session-derived owner/finder capabilities, verification answers, finder decision, claimant handover, conflict refresh, and truthful contact instructions are connected to the existing backend state machine.
 - [ ] **End-to-End Multimodal Verification**: API and service smoke checks pass; complete two-party browser verification from report submission -> embedding -> match -> claim -> handover remains pending.
+
+## Module 4 (Emergency System) Integration Checkpoints
+
+- [x] **Contract Standardization**: Emergency Report, Broadcast Alert, Safety Check-in, and History schemas defined in `@smart-campus/contracts/src/emergency.ts`.
+- [x] **Database Migrations**: Schemas defined in `supabase/migrations/013_emergency_persistence.sql`, `014_emergency_update_policy_hardening.sql`, and `018_emergency_report_history.sql`.
+- [x] **Server Permissions & Identity**: Strict server-derived identity (`resolveServerIdentity`) and authorization (`emergency-permissions.ts`).
+- [x] **Audience Visibility Filtering**: Server routes filter alerts based on target scope (`campus_wide`, department/role audience, or `responders_only`).
+- [x] **Safe In-App Realtime Delivery**: `EmergencyBanner` operates with 30s bounded polling, tab-focus / visibility refetch, and request deduplication.
+- [x] **Responder Lifecycle & Concurrency**: Complete state machine transitions (`submitted` -> `acknowledged`/`verifying`/`rejected`; `verifying` -> `verified`/`acknowledged`/`rejected`; `verified` -> `resolved`/`verifying`) with optimistic concurrency (`409 Conflict`).
+- [x] **Atomic Database Audit Trail**: PostgreSQL function `transition_emergency_report_status` locks report row and records transition audit record atomically.
+- [x] **Live Database Connection**: Connected to hosted Supabase instance with verified live reads/writes on `emergency_reports`, `emergency_alerts`, and `emergency_check_ins`.
+- [x] **Comprehensive Test Verification**: 36 unit/integration tests passing across contracts, permissions, polling, and lifecycle suites.
 
 ## Current integration boundaries
 

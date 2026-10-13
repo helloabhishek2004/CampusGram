@@ -85,6 +85,98 @@ describe("CampusGram Complaint System Module", () => {
       expect(matchResult.matched).toBe(true);
       expect(matchResult.similarity_score).toBeGreaterThanOrEqual(0.35);
     });
+
+    it("does NOT group complaints across distinct locations (Block A vs Block B, Room 204 vs Room 205)", () => {
+      const existing: ExistingComplaintCandidate[] = [
+        {
+          id: "cmp-block-a",
+          text: "Water leak in hostel Block A.",
+          cluster_id: "cluster_block_a",
+        },
+        {
+          id: "cmp-room-204",
+          text: "Please fix broken projector in room 204",
+          cluster_id: "cluster_room_204",
+        },
+      ];
+
+      const blockB = findMatchingCluster("Water leak in hostel Block B.", existing);
+      expect(blockB.matched).toBe(false);
+      expect(blockB.cluster_id).not.toBe("cluster_block_a");
+
+      const room205 = findMatchingCluster("Please fix broken window in room 205", existing);
+      expect(room205.matched).toBe(false);
+      expect(room205.cluster_id).not.toBe("cluster_room_204");
+    });
+
+    it("does NOT group complaints with contradictory negation states", () => {
+      const existing: ExistingComplaintCandidate[] = [
+        {
+          id: "cmp-leak",
+          text: "Water leak beside north library entrance",
+          cluster_id: "cluster_leak",
+        },
+        {
+          id: "cmp-internet",
+          text: "Library internet is working",
+          cluster_id: "cluster_internet",
+        },
+      ];
+
+      const noLeak = findMatchingCluster(
+        "No water leak beside north library entrance; only a broken sign",
+        existing,
+      );
+      expect(noLeak.matched).toBe(false);
+      expect(noLeak.cluster_id).not.toBe("cluster_leak");
+
+      const notWorking = findMatchingCluster(
+        "Library internet is not working",
+        existing,
+      );
+      expect(notWorking.matched).toBe(false);
+      expect(notWorking.cluster_id).not.toBe("cluster_internet");
+    });
+
+    it("groups Malayalam and transliterated reports accurately", () => {
+      const existing: ExistingComplaintCandidate[] = [
+        {
+          id: "cmp-mal-1",
+          text: "ഹോസ്റ്റൽ എയിൽ വെള്ളം ഇല്ല",
+          cluster_id: "cluster_malayalam_water",
+        },
+      ];
+
+      const malMatch = findMatchingCluster(
+        "ഹോസ്റ്റൽ എയിൽ വെള്ളം ലഭിക്കുന്നില്ല",
+        existing,
+      );
+      expect(malMatch.matched).toBe(true);
+      expect(malMatch.cluster_id).toBe("cluster_malayalam_water");
+      expect(malMatch.similarity_score).toBeGreaterThanOrEqual(0.35);
+    });
+
+    it("breaks ties deterministically on equal similarity scores", () => {
+      const existing: ExistingComplaintCandidate[] = [
+        {
+          id: "cmp-b",
+          text: "Broken fan in room 102",
+          cluster_id: "cluster_fan_b",
+        },
+        {
+          id: "cmp-a",
+          text: "Broken fan in room 102",
+          cluster_id: "cluster_fan_a",
+        },
+      ];
+
+      // With identical text, similarity score is 1.0 for both.
+      // Tie breaker should deterministically select cmp-a (lower alphabetical ID)
+      const result = findMatchingCluster("Broken fan in room 102", existing);
+      expect(result.matched).toBe(true);
+      expect(result.matched_complaint_id).toBe("cmp-a");
+      expect(result.cluster_id).toBe("cluster_fan_a");
+    });
   });
 
   describe("2. Emergency Threshold Progression (1..4 Normal, 5 Emergency Cascade)", () => {

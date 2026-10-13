@@ -27,6 +27,10 @@ export function DesktopTopBar() {
     if (pathname.startsWith("/faculty")) return "Faculty & Administration / Academic Portal";
     if (pathname.startsWith("/profile")) return "Account / Institutional Profile";
     if (pathname.startsWith("/settings")) return "Account / Preferences";
+    if (pathname === "/about") return "Information / About CampusGram";
+    if (pathname === "/help") return "Support / Operational Guide";
+    if (pathname === "/privacy") return "Legal / Privacy Policy";
+    if (pathname === "/terms") return "Legal / Terms of Service";
     return "CampusGram Smart Campus";
   };
 

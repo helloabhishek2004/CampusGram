@@ -77,6 +77,73 @@ export class EmergencyService {
   async recordSafetyCheckIn(input: SafetyCheckIn, identity: EmergencyIdentity): Promise<{ success: boolean; totalSafe: number }> {
     return this.repository.recordCheckIn(input, identity);
   }
+
+  /**
+   * Allowed lifecycle transitions:
+   * - submitted: can transition to 'acknowledged', 'verifying', or 'rejected'
+   * - verifying: can transition to 'verified', 'acknowledged', or 'rejected'
+   * - acknowledged: can transition to 'verifying', 'verified', or 'rejected'
+   * - verified: can transition to 'resolved' or 'verifying'
+   * - resolved / rejected: terminal states, no transitions permitted
+   */
+  static readonly ALLOWED_TRANSITIONS: Record<import("@smart-campus/contracts").EmergencyReportStatus, import("@smart-campus/contracts").EmergencyReportStatus[]> = {
+    submitted: ["acknowledged", "verifying", "rejected"],
+    verifying: ["verified", "acknowledged", "rejected"],
+    acknowledged: ["verifying", "verified", "rejected"],
+    verified: ["resolved", "verifying"],
+    resolved: [],
+    rejected: [],
+  };
+
+  isValidTransition(
+    currentStatus: import("@smart-campus/contracts").EmergencyReportStatus,
+    targetStatus: import("@smart-campus/contracts").EmergencyReportStatus
+  ): boolean {
+    const allowed = EmergencyService.ALLOWED_TRANSITIONS[currentStatus] || [];
+    return allowed.includes(targetStatus);
+  }
+
+  async updateReportStatus(
+    reportId: string,
+    targetStatus: import("@smart-campus/contracts").EmergencyReportStatus,
+    expectedPreviousStatus?: import("@smart-campus/contracts").EmergencyReportStatus,
+    actor?: { userId: string; fullName: string },
+    note?: string
+  ): Promise<EmergencyReport> {
+    const current = await this.repository.getReport(reportId);
+    if (!current) {
+      throw new Error("Emergency report not found.");
+    }
+
+    if (expectedPreviousStatus && current.status !== expectedPreviousStatus) {
+      throw new Error(
+        `Conflict: Report is currently '${current.status}', but '${expectedPreviousStatus}' was expected.`
+      );
+    }
+
+    if (!this.isValidTransition(current.status, targetStatus)) {
+      throw new Error(
+        `Invalid status transition from '${current.status}' to '${targetStatus}'.`
+      );
+    }
+
+    const sanitizedNote = note ? note.trim().slice(0, 500) : undefined;
+    return this.repository.updateReportStatus(
+      reportId,
+      targetStatus,
+      current.status,
+      actor,
+      sanitizedNote
+    );
+  }
+
+  async getReportHistory(reportId: string): Promise<import("@smart-campus/contracts").EmergencyReportHistoryView[]> {
+    const report = await this.repository.getReport(reportId);
+    if (!report) {
+      throw new Error("Emergency report not found.");
+    }
+    return this.repository.getReportHistory(reportId);
+  }
 }
 
 export const emergencyService = new EmergencyService();

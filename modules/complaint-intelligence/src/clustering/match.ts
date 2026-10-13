@@ -32,7 +32,11 @@ export function findSimilarCandidates(
     }
   }
 
-  matches.sort((a, b) => b.similarity_score - a.similarity_score);
+  matches.sort(
+    (a, b) =>
+      b.similarity_score - a.similarity_score ||
+      a.complaint_id.localeCompare(b.complaint_id),
+  );
 
   const bestMatch = matches[0];
   const isDuplicate = Boolean(bestMatch && bestMatch.similarity_score >= 0.5);

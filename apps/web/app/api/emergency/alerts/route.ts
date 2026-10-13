@@ -2,18 +2,28 @@ import { NextRequest, NextResponse } from "next/server";
 import { emergencyService } from "@/lib/emergency/emergency-service";
 import { CreateEmergencyAlertInputSchema } from "@smart-campus/contracts";
 import { resolveServerIdentity } from "@/lib/auth/server-identity";
-import { canCreateEmergencyBroadcast } from "@/lib/emergency/emergency-permissions";
+import { canCreateEmergencyBroadcast, canViewEmergencyAlert } from "@/lib/emergency/emergency-permissions";
 
 export async function GET() {
   try {
-    if (!await resolveServerIdentity({ allowDemo: true })) return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 });
+    const identity = await resolveServerIdentity({ allowDemo: true });
+    if (!identity) return NextResponse.json({ success: false, error: "Authentication required" }, { status: 401 });
+
     const { alerts, active } = await emergencyService.getAlertData();
     const hotlines = emergencyService.getHotlines();
 
+    // Filter alerts so they are only visible to their selected audience
+    const visibleAlerts = alerts.filter((alert) =>
+      canViewEmergencyAlert(alert.scope, identity.profile)
+    );
+    const visibleActive = active.filter((alert) =>
+      canViewEmergencyAlert(alert.scope, identity.profile)
+    );
+
     return NextResponse.json({
       success: true,
-      alerts,
-      active,
+      alerts: visibleAlerts,
+      active: visibleActive,
       hotlines,
     });
   } catch (error) {

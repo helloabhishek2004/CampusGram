@@ -40,6 +40,7 @@ describe("Module 2 provider and provenance regressions", () => {
   beforeEach(() => {
     vi.clearAllMocks();
     vi.unstubAllEnvs();
+    delete process.env.GEMINI_API_KEY;
   });
 
   it("fails closed when Gemini is explicitly selected without an API key", async () => {

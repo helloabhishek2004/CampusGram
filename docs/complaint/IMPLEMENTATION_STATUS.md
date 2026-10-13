@@ -144,4 +144,4 @@ Against an isolated Supabase project with fictional data and `AUTH_MODE=mock`:
 
 **Level 3 — Integrated hackathon system, pending live acceptance.**
 
-The local implementation now connects intake, owner-scoped views, global emergency aggregates, staff lifecycle mutation, attachment security, and deterministic analysis boundaries. It is not Level 4 because live migration/RLS/auth/storage/deployment checks, durable attachments, notification delivery, concurrency serialization, and browser multi-user acceptance are still outstanding.
+The local implementation connects intake, owner-scoped views, global emergency aggregates, staff lifecycle mutation, attachment security, and deterministic analysis boundaries. Phase 2 text analysis improvement is complete with verified Unicode-aware normalization, Malayalam support, location/negation conflict guards, and deterministic tie-breaking (precision 100%, recall 70%, F1 82.35% on the 20-pair benchmark). Live migration/RLS/auth/storage/deployment checks, durable attachments, notification delivery, concurrency serialization, and browser multi-user acceptance remain outstanding.

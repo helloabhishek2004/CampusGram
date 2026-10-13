@@ -119,7 +119,22 @@ export default function EmergencyControlPage() {
   }, []);
 
   useEffect(() => {
+    // Initial fetch of both alerts and reports
     fetchEmergencyData(false);
+
+    // Live polling subscription for alerts (every 5 seconds while active)
+    const unsubscribe = emergencyClientService.pollAlerts(
+      (alertsRes) => {
+        if (alertsRes.success) {
+          setData(alertsRes);
+        }
+      },
+      { intervalMs: 5_000 }
+    );
+
+    return () => {
+      unsubscribe();
+    };
   }, [fetchEmergencyData]);
 
   // Handle SOS submission
@@ -210,6 +225,37 @@ export default function EmergencyControlPage() {
       setBroadcastResult("Broadcast transmission failed");
     } finally {
       setBroadcastSubmitting(false);
+    }
+  };
+
+  // State for transitioning report lifecycle
+  const [reportActionLoading, setReportActionLoading] = useState<string | null>(null);
+  const [reportActionFeedback, setReportActionFeedback] = useState<{ id: string; error?: string; success?: string } | null>(null);
+
+  const handleReportTransition = async (
+    reportId: string,
+    targetStatus: import("@smart-campus/contracts").EmergencyReportStatus,
+    currentStatus: import("@smart-campus/contracts").EmergencyReportStatus
+  ) => {
+    if (reportActionLoading) return;
+    setReportActionLoading(reportId);
+    setReportActionFeedback(null);
+    try {
+      const res = await emergencyClientService.updateReportStatus(reportId, targetStatus, currentStatus);
+      if (res.success && res.report) {
+        setReportActionFeedback({ id: reportId, success: `Status changed to ${targetStatus.toUpperCase()}` });
+        // Update local state and trigger refresh
+        setReports((prev) =>
+          prev.map((r) => (r.id === reportId ? { ...r, status: targetStatus, resolved_at: res.report?.resolved_at ?? r.resolved_at } : r))
+        );
+        fetchEmergencyData(true);
+      } else {
+        setReportActionFeedback({ id: reportId, error: res.error || "Failed to update report status" });
+      }
+    } catch {
+      setReportActionFeedback({ id: reportId, error: "Network error during update" });
+    } finally {
+      setReportActionLoading(null);
     }
   };
 
@@ -888,16 +934,150 @@ export default function EmergencyControlPage() {
                     {rep.description}
                   </p>
 
-                  <div className="pt-2 border-t border-border flex items-center justify-between text-[11px] text-muted-foreground font-mono">
+                  <div className="pt-2 border-t border-border flex flex-wrap items-center justify-between gap-2 text-[11px] text-muted-foreground font-mono">
                     <div className="flex items-center gap-1.5">
                       <MapPin className="w-3 h-3 text-muted-foreground" />
                       <span>{rep.location_name}</span>
                     </div>
-                    <div>
+                    <div className="flex items-center gap-2">
                       <span>Status: </span>
-                      <strong className="text-foreground uppercase">{rep.status}</strong>
+                      <strong className={cn(
+                        "uppercase px-2 py-0.5 rounded text-[10px] font-bold border",
+                        rep.status === "resolved"
+                          ? "bg-emerald-500/15 text-emerald-600 dark:text-emerald-400 border-emerald-500/30"
+                          : rep.status === "rejected"
+                          ? "bg-destructive/15 text-destructive border-destructive/30"
+                          : rep.status === "verifying" || rep.status === "verified"
+                          ? "bg-blue-500/15 text-blue-600 dark:text-blue-400 border-blue-500/30"
+                          : "bg-muted text-foreground border-border"
+                      )}>
+                        {rep.status}
+                      </strong>
                     </div>
                   </div>
+
+                  {/* Feedback line for report actions */}
+                  {reportActionFeedback && reportActionFeedback.id === rep.id && (
+                    <div className={cn(
+                      "text-[11px] font-mono px-3 py-1.5 rounded-lg border",
+                      reportActionFeedback.error
+                        ? "bg-destructive/10 border-destructive/20 text-destructive"
+                        : "bg-emerald-500/10 border-emerald-500/20 text-emerald-600 dark:text-emerald-400"
+                    )}>
+                      {reportActionFeedback.error || reportActionFeedback.success}
+                    </div>
+                  )}
+
+                  {/* Responder Action Controls (Staff / Security only) */}
+                  {isStaffOrAdmin && (
+                    <div className="pt-2 border-t border-border/70 flex flex-wrap items-center justify-between gap-2">
+                      <span className="text-[10px] uppercase font-mono tracking-wider text-muted-foreground font-semibold">
+                        Responder Actions:
+                      </span>
+                      <div className="flex flex-wrap items-center gap-1.5">
+                        {/* Transitions from 'submitted' */}
+                        {rep.status === "submitted" && (
+                          <>
+                            <button
+                              onClick={() => handleReportTransition(rep.id, "acknowledged", rep.status)}
+                              disabled={reportActionLoading === rep.id}
+                              className="apple-press px-2.5 py-1 rounded-md text-[11px] font-semibold bg-muted hover:bg-accent text-foreground border border-border disabled:opacity-50 transition-colors"
+                            >
+                              {reportActionLoading === rep.id ? "Updating..." : "Acknowledge"}
+                            </button>
+                            <button
+                              onClick={() => handleReportTransition(rep.id, "verifying", rep.status)}
+                              disabled={reportActionLoading === rep.id}
+                              className="apple-press px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-500/15 hover:bg-blue-500/25 text-blue-600 dark:text-blue-400 border border-blue-500/30 disabled:opacity-50 transition-colors"
+                            >
+                              {reportActionLoading === rep.id ? "Updating..." : "Start Verification"}
+                            </button>
+                            <button
+                              onClick={() => handleReportTransition(rep.id, "rejected", rep.status)}
+                              disabled={reportActionLoading === rep.id}
+                              className="apple-press px-2.5 py-1 rounded-md text-[11px] font-semibold bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/20 disabled:opacity-50 transition-colors"
+                            >
+                              {reportActionLoading === rep.id ? "Updating..." : "Reject / False Alarm"}
+                            </button>
+                          </>
+                        )}
+
+                        {/* Transitions from 'verifying' */}
+                        {rep.status === "verifying" && (
+                          <>
+                            <button
+                              onClick={() => handleReportTransition(rep.id, "verified", rep.status)}
+                              disabled={reportActionLoading === rep.id}
+                              className="apple-press px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-500/20 hover:bg-blue-500/30 text-blue-600 dark:text-blue-400 border border-blue-500/30 disabled:opacity-50 transition-colors"
+                            >
+                              {reportActionLoading === rep.id ? "Updating..." : "Confirm Verified"}
+                            </button>
+                            <button
+                              onClick={() => handleReportTransition(rep.id, "rejected", rep.status)}
+                              disabled={reportActionLoading === rep.id}
+                              className="apple-press px-2.5 py-1 rounded-md text-[11px] font-semibold bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/20 disabled:opacity-50 transition-colors"
+                            >
+                              {reportActionLoading === rep.id ? "Updating..." : "Reject / False Alarm"}
+                            </button>
+                          </>
+                        )}
+
+                        {/* Transitions from 'acknowledged' */}
+                        {rep.status === "acknowledged" && (
+                          <>
+                            <button
+                              onClick={() => handleReportTransition(rep.id, "verifying", rep.status)}
+                              disabled={reportActionLoading === rep.id}
+                              className="apple-press px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-500/15 hover:bg-blue-500/25 text-blue-600 dark:text-blue-400 border border-blue-500/30 disabled:opacity-50 transition-colors"
+                            >
+                              {reportActionLoading === rep.id ? "Updating..." : "Start Verification"}
+                            </button>
+                            <button
+                              onClick={() => handleReportTransition(rep.id, "verified", rep.status)}
+                              disabled={reportActionLoading === rep.id}
+                              className="apple-press px-2.5 py-1 rounded-md text-[11px] font-semibold bg-blue-500/20 hover:bg-blue-500/30 text-blue-600 dark:text-blue-400 border border-blue-500/30 disabled:opacity-50 transition-colors"
+                            >
+                              {reportActionLoading === rep.id ? "Updating..." : "Confirm Verified"}
+                            </button>
+                            <button
+                              onClick={() => handleReportTransition(rep.id, "rejected", rep.status)}
+                              disabled={reportActionLoading === rep.id}
+                              className="apple-press px-2.5 py-1 rounded-md text-[11px] font-semibold bg-destructive/10 hover:bg-destructive/20 text-destructive border border-destructive/20 disabled:opacity-50 transition-colors"
+                            >
+                              {reportActionLoading === rep.id ? "Updating..." : "Reject / False Alarm"}
+                            </button>
+                          </>
+                        )}
+
+                        {/* Transitions from 'verified' */}
+                        {rep.status === "verified" && (
+                          <>
+                            <button
+                              onClick={() => handleReportTransition(rep.id, "resolved", rep.status)}
+                              disabled={reportActionLoading === rep.id}
+                              className="apple-press px-2.5 py-1 rounded-md text-[11px] font-bold bg-emerald-500/20 hover:bg-emerald-500/30 text-emerald-600 dark:text-emerald-400 border border-emerald-500/30 disabled:opacity-50 transition-colors"
+                            >
+                              {reportActionLoading === rep.id ? "Updating..." : "Mark Resolved"}
+                            </button>
+                            <button
+                              onClick={() => handleReportTransition(rep.id, "verifying", rep.status)}
+                              disabled={reportActionLoading === rep.id}
+                              className="apple-press px-2.5 py-1 rounded-md text-[11px] font-semibold bg-muted hover:bg-accent text-foreground border border-border disabled:opacity-50 transition-colors"
+                            >
+                              {reportActionLoading === rep.id ? "Updating..." : "Re-Verify"}
+                            </button>
+                          </>
+                        )}
+
+                        {/* Terminal statuses */}
+                        {(rep.status === "resolved" || rep.status === "rejected") && (
+                          <span className="text-[10px] text-muted-foreground italic">
+                            Terminal status ({rep.status === "resolved" && rep.resolved_at ? `Resolved at ${new Date(rep.resolved_at).toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" })}` : "Closed"})
+                          </span>
+                        )}
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))
             )}

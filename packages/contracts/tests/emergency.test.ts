@@ -70,4 +70,47 @@ describe("Module 4: Emergency Contracts", () => {
     const parsed = SafetyCheckInSchema.safeParse(checkin);
     expect(parsed.success).toBe(true);
   });
+
+  it("validates emergency report lifecycle update payload", () => {
+    const validUpdate = {
+      status: "acknowledged",
+      expected_previous_status: "submitted",
+      note: "Dispatched officer to investigate",
+    };
+    const parsed = import("../src/emergency").then((m) => {
+      expect(m.UpdateEmergencyReportStatusInputSchema.safeParse(validUpdate).success).toBe(true);
+    });
+
+    const invalidUpdate = {
+      status: "non_existent_status",
+    };
+    import("../src/emergency").then((m) => {
+      expect(m.UpdateEmergencyReportStatusInputSchema.safeParse(invalidUpdate).success).toBe(false);
+    });
+  });
+
+  it("validates emergency report history record schema", async () => {
+    const { EmergencyReportHistoryViewSchema } = await import("../src/emergency");
+    const record = {
+      id: "hist-101",
+      report_id: "rep-101",
+      from_status: "submitted",
+      to_status: "verifying",
+      actor_id: "actor-1",
+      actor_name: "Responder Patel",
+      note: "Investigating alarm",
+      created_at: new Date().toISOString(),
+    };
+    expect(EmergencyReportHistoryViewSchema.safeParse(record).success).toBe(true);
+
+    const invalidRecord = {
+      id: "hist-102",
+      report_id: "rep-101",
+      from_status: "invalid_status",
+      to_status: "verifying",
+      actor_id: "actor-1",
+      created_at: new Date().toISOString(),
+    };
+    expect(EmergencyReportHistoryViewSchema.safeParse(invalidRecord).success).toBe(false);
+  });
 });

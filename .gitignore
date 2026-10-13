@@ -42,3 +42,12 @@ Thumbs.db
 modules/lost-and-found/data/db.json
 apps/web/.data/
 *.tsbuildinfo
+
+# Python / AI service caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.venv/
+env/
+venv/

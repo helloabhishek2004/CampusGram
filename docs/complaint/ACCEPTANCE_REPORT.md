@@ -629,3 +629,54 @@ Private app environment remained ignored and unchanged; tracked legacy images an
 all application/module/migration/configuration files were unchanged. Only Complaint
 documentation was edited and remains **uncommitted**. Browser E2E awaits the user's
 sensitive-input handoff and is not claimed passed.
+
+---
+
+## 7. Phase 2 Text-Analysis Improvement Acceptance Addendum (2026-10-11)
+
+### Scope
+Improve deterministic duplicate detection, Unicode preprocessing, and text similarity quality while preserving Phase 1 safety triage, incident escalation, authorization boundaries, and student privacy.
+
+### Implemented Improvements
+1. **Unicode & Normalization Preprocessing:**
+   - Applied conservative NFKC Unicode normalization (`modules/complaint-intelligence/src/clustering/similarity.ts`).
+   - Retained Unicode letters (`\p{L}`) and numbers (`\p{N}`), preserving Malayalam script (e.g., `ഹോസ്റ്റൽ`, `വെള്ളം`, `ലഭിക്കുന്നില്ല`) and Romanized Malayalam / Manglish without stripping non-ASCII characters.
+   - Preserved critical short tokens: `a`, `b`, `no`, `not`, `ac`, and digits/identifiers (`102`, `204`).
+   - Normalized equipment variants: `wi-fi`, `wi fi` → `wifi`.
+   - Collapsed excessive character repetition (3+ identical characters collapsed to 1).
+   - Filtered curated English stop words (`the`, `is`, `in`, `at`, etc.) while strictly preserving negation (`no`, `not`) and single-letter block identifiers (`a`).
+
+2. **Unsafe Automatic Match Prevention & Conflict Guards:**
+   - Added `hasDirectIncidentContradiction()` evaluating:
+     - **Location conflicts:** Explicit conflicting blocks (Block A vs Block B) or rooms (Room 204 vs Room 205).
+     - **Direct negation contradictions:** Affirmative vs negated states (`water leak` vs `no water leak`, `working` vs `not working`).
+     - **Temporal / routine inspection conflicts:** Mismatched days of week (`monday` vs `friday`, `today` vs `tomorrow`) and routine inspection vs active hazard.
+   - Returning `0` similarity when an irreconcilable operational contradiction is detected.
+
+3. **Deterministic Tie-Breaking:**
+   - Both `findSimilarCandidates()` and `findMatchingCluster()` sort by similarity score descending, breaking ties deterministically by alphabetical complaint/candidate ID (`localeCompare`).
+
+### 20-Pair Exploratory Benchmark Evaluation Results
+Evaluated on the exact 20-pair exploratory benchmark from `docs/complaint/TEXT_ANALYSIS_AUDIT.md` §5.2:
+
+| Metric | Phase 1 Baseline (Jaccard @ 0.35) | Phase 2 Implemented (Jaccard @ 0.35) | Phase 2 Standalone (@ 0.50) |
+| :--- | :--- | :--- | :--- |
+| **True Positives (TP)** | 5 | **7** | 5 |
+| **False Positives (FP)** | 8 | **0** | **0** |
+| **True Negatives (TN)** | 2 | **10** | **10** |
+| **False Negatives (FN)** | 5 | **3** | 5 |
+| **Precision** | 38.46% | **100.00%** | **100.00%** |
+| **Recall** | 50.00% | **70.00%** | 50.00% |
+| **F1 Score** | 43.48% | **82.35%** | **66.67%** |
+
+- **False positives eliminated (8 → 0):** D03, D04, D09, D10, D14, D16, D18, D20 correctly identified as negatives via location and contradiction guards.
+- **Malayalam & Transliteration recalled:** D07, D08, and D17 correctly recognized as duplicates without foreign API dependencies.
+- **Remaining False Negatives (3):** D02 (zero-overlap paraphrase), D06 (abbreviated SMS slang `projctr nt wrking clsrm 204 pls`), D12 (vocabulary paraphrase `wireless connection drops upstairs`).
+
+### Test & Regression Execution Receipts
+- `modules/complaint-intelligence`: 21 tests passed (4 test files).
+- `apps/web`: 23 focused complaint tests passed, 106 incident policy tests passed.
+- Workspace typecheck (`tsc --noEmit`): **PASS**.
+- Workspace lint: **PASS**.
+- Next.js production build (`pnpm build`): **PASS** (49 static pages generated).
+- `git diff --check`: **PASS** (clean whitespace).

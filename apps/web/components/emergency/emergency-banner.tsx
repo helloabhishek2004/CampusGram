@@ -9,32 +9,31 @@ import { cn } from "@smart-campus/utils";
 
 export function EmergencyBanner() {
   const [activeAlert, setActiveAlert] = useState<EmergencyAlert | null>(null);
-  const [dismissed, setDismissed] = useState(false);
+  const [dismissedAlertId, setDismissedAlertId] = useState<string | null>(null);
 
   useEffect(() => {
-    let mounted = true;
-    async function loadAlerts() {
-      try {
-        const res = await emergencyClientService.getAlerts();
-        if (mounted && res.active && res.active.length > 0) {
+    const unsubscribe = emergencyClientService.pollAlerts(
+      (res) => {
+        if (res.active && res.active.length > 0) {
           // Priority to critical or warning
           const criticalOrWarning = res.active.find(
             (a) => a.severity === "critical" || a.severity === "warning"
           );
           setActiveAlert(criticalOrWarning || res.active[0]);
+        } else {
+          // All active alerts cleared / resolved
+          setActiveAlert(null);
         }
-      } catch {
-        // Silent catch for banner
-      }
-    }
+      },
+      { intervalMs: 5_000 }
+    );
 
-    loadAlerts();
     return () => {
-      mounted = false;
+      unsubscribe();
     };
   }, []);
 
-  if (!activeAlert || dismissed) return null;
+  if (!activeAlert || dismissedAlertId === activeAlert.id) return null;
 
   const isCritical = activeAlert.severity === "critical";
   const isWarning = activeAlert.severity === "warning";
@@ -101,7 +100,7 @@ export function EmergencyBanner() {
           <ArrowRight className="w-3 h-3 sm:w-3.5 sm:h-3.5" />
         </Link>
         <button
-          onClick={() => setDismissed(true)}
+          onClick={() => activeAlert && setDismissedAlertId(activeAlert.id)}
           className="p-1 rounded hover:bg-black/10 dark:hover:bg-white/10 text-zinc-500 hover:text-zinc-900 dark:text-zinc-400 dark:hover:text-zinc-200 transition-colors"
           aria-label="Dismiss alert banner"
         >

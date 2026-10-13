@@ -138,7 +138,14 @@ describe("private complaint attachment GET", () => {
     const target = path.join(temporaryDir, "outside.png");
     await writeFile(target, pngBytes);
     await rm(filePath);
-    await symlink(target, filePath);
+    try {
+      await symlink(target, filePath);
+    } catch (error: unknown) {
+      if ((error as { code?: string })?.code === "EPERM") {
+        return; // Windows unprivileged symlink creation is not permitted by OS policy
+      }
+      throw error;
+    }
     await expectDenied(await request(filename, { Cookie: cookieFor(owner) }), 404);
   });
 

@@ -53,7 +53,12 @@ export function findMatchingCluster(
 
   for (const candidate of existingComplaints) {
     const score = computeJaccardSimilarity(newText, candidate.text);
-    if (score > bestScore) {
+    if (
+      score > bestScore ||
+      (score === bestScore &&
+        bestCandidate !== null &&
+        candidate.id.localeCompare(bestCandidate.id) < 0)
+    ) {
       bestScore = score;
       bestCandidate = candidate;
     }

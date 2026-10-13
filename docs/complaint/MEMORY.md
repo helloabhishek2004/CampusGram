@@ -5,6 +5,8 @@
 > current security boundary. Current student API views are owner-scoped, with
 > authoritative global cluster counts. New uploads live in private ignored
 > `apps/web/.data/uploads/complaints` and require owner/staff-authorized byte reads.
+> Text similarity uses Phase 2 Unicode-aware tokenization, Malayalam support,
+> explicit location/negation conflict checks, and deterministic tie-breaking.
 > Installed Next.js is 15.5.27. Local API/database acceptance was executed, but
 > browser E2E awaits a user-controlled OTP handoff and is not verified. Read
 > `IMPLEMENTATION_STATUS.md` and the latest `ACCEPTANCE_REPORT.md` addendum for

@@ -169,3 +169,56 @@ export const SafetyCheckInSchema = z.object({
   user_id: z.string().optional(),
 });
 export type SafetyCheckIn = z.infer<typeof SafetyCheckInSchema>;
+
+/**
+ * Emergency Report Lifecycle Status
+ */
+export const EmergencyReportStatusSchema = z.enum([
+  "submitted",
+  "acknowledged",
+  "verifying",
+  "verified",
+  "resolved",
+  "rejected",
+]);
+export type EmergencyReportStatus = z.infer<typeof EmergencyReportStatusSchema>;
+
+/**
+ * Payload for updating an emergency report lifecycle status
+ */
+export const UpdateEmergencyReportStatusInputSchema = z.object({
+  status: EmergencyReportStatusSchema,
+  expected_previous_status: EmergencyReportStatusSchema.optional(),
+  note: z.string().max(500).optional(),
+});
+export type UpdateEmergencyReportStatusInput = z.infer<typeof UpdateEmergencyReportStatusInputSchema>;
+
+/**
+ * Emergency Report Lifecycle History Record
+ */
+export const EmergencyReportHistorySchema = z.object({
+  id: z.string(),
+  report_id: z.string(),
+  from_status: EmergencyReportStatusSchema,
+  to_status: EmergencyReportStatusSchema,
+  actor_id: z.string(),
+  actor_name: z.string().optional(),
+  note: z.string().optional(),
+  created_at: z.string(),
+});
+export type EmergencyReportHistory = z.infer<typeof EmergencyReportHistorySchema>;
+
+/**
+ * Sanitized Audit History View returned to authorized clients
+ */
+export const EmergencyReportHistoryViewSchema = z.object({
+  id: z.string(),
+  report_id: z.string(),
+  from_status: EmergencyReportStatusSchema,
+  to_status: EmergencyReportStatusSchema,
+  actor_id: z.string(),
+  actor_name: z.string().optional(),
+  note: z.string().optional(),
+  created_at: z.string(),
+});
+export type EmergencyReportHistoryView = z.infer<typeof EmergencyReportHistoryViewSchema>;

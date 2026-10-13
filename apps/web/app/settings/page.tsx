@@ -2,6 +2,7 @@
 
 import React, { useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { AppShell } from "@/components/layout/app-shell";
 import { useCampusAuth } from "@/components/auth/auth-guard";
 import { useTheme } from "@/components/theme/theme-context";
@@ -319,9 +320,26 @@ export default function SettingsPage() {
           </div>
         </section>
 
-        {/* Section 5: About */}
-        <footer className="text-center text-[11px] text-muted-foreground font-mono pt-4">
-          CampusGram • Version 1.0 (Release Candidate) • Smart Campus Monorepo
+        {/* Section 5: Legal & System Info */}
+        <footer className="text-center text-[11px] text-muted-foreground font-mono pt-4 space-y-2">
+          <div>CampusGram • Version 1.0 (Release Candidate) • Smart Campus Monorepo</div>
+          <div className="flex items-center justify-center gap-3 font-sans">
+            <Link href="/about" className="hover:text-foreground transition-colors">
+              About
+            </Link>
+            <span>•</span>
+            <Link href="/help" className="hover:text-foreground transition-colors">
+              Help &amp; Support
+            </Link>
+            <span>•</span>
+            <Link href="/privacy" className="hover:text-foreground transition-colors">
+              Privacy Policy
+            </Link>
+            <span>•</span>
+            <Link href="/terms" className="hover:text-foreground transition-colors">
+              Terms of Service
+            </Link>
+          </div>
         </footer>
       </div>
     </AppShell>

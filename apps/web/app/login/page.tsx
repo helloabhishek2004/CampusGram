@@ -2,6 +2,7 @@
 
 import React, { useEffect } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { CollegeIdForm } from "@/components/auth/college-id-form";
 import { useCampusAuth } from "@/components/auth/auth-guard";
@@ -88,11 +89,28 @@ export default function LoginPage() {
       </main>
 
       {/* Footer */}
-      <footer className="absolute bottom-5 left-0 right-0 z-10 px-5 text-center sm:bottom-8">
+      <footer className="absolute bottom-4 left-0 right-0 z-10 px-5 text-center sm:bottom-6 space-y-2">
         <p className="flex items-center justify-center gap-1.5 text-xs text-zinc-500 dark:text-zinc-400">
           <ShieldCheck className="h-3.5 w-3.5 text-zinc-500 dark:text-zinc-400" />
           <span>Verified against institutional directory records</span>
         </p>
+        <div className="flex items-center justify-center gap-3 text-[11px] text-zinc-500 dark:text-zinc-400">
+          <Link href="/about" className="hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors">
+            About
+          </Link>
+          <span>•</span>
+          <Link href="/help" className="hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors">
+            Help &amp; Support
+          </Link>
+          <span>•</span>
+          <Link href="/privacy" className="hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors">
+            Privacy
+          </Link>
+          <span>•</span>
+          <Link href="/terms" className="hover:text-zinc-900 dark:hover:text-zinc-200 transition-colors">
+            Terms
+          </Link>
+        </div>
       </footer>
     </div>
   );

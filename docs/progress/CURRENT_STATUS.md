@@ -89,3 +89,18 @@ Status: **Integrated Hackathon System; browser acceptance pending**
   warnings but no errors.
 - Full multi-user browser E2E remains unverified because browser sign-in/tab
   handoff was not completed.
+
+---
+
+## Current Consolidated Status — 2026-10-13
+
+### Module 4 — Emergency Alert System
+
+Status: **Phase 1, Phase 2, Phase 3, and Supabase Persistence Complete**
+
+- **Safe Realtime Delivery:** Global in-app `EmergencyBanner` queries active broadcasts with bounded 30s background polling, visibility change listening (immediate tab refetch), and in-flight request deduplication.
+- **Responder Lifecycle Management:** Responder controls implemented on `/emergency` with strict state machine validation (`submitted` -> `acknowledged` / `verifying` / `rejected`; `verifying` -> `verified` / `acknowledged` / `rejected`; `verified` -> `resolved` / `verifying`).
+- **Atomic Audit Trail:** Migration `018_emergency_report_history.sql` adds persistent history table and transactional PostgreSQL RPC `transition_emergency_report_status` with optimistic concurrency checking (`expected_previous_status`).
+- **Audience Visibility Filtering:** Alerts filtered via `canViewEmergencyAlert` to ensure broadcasts target specific roles, campus-wide, or responders only.
+- **Hosted Supabase Live Connection:** Connected to live hosted Supabase instance with verified table persistence (`emergency_reports`, `emergency_alerts`, `emergency_check_ins`).
+- **Test Suite Status:** 36 passing emergency tests (`apps/web/tests/emergency.test.ts`, `emergency-permissions.test.ts`, `emergency-polling.test.ts`, `emergency-reports-lifecycle.test.ts`).

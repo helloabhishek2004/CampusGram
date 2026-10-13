@@ -8,7 +8,15 @@ import { IntelligenceOptions } from "./types/index";
 
 export * from "./types/index";
 export { findSimilarCandidates, type CandidateIssue } from "./clustering/match";
-export { computeJaccardSimilarity, tokenize } from "./clustering/similarity";
+export {
+  computeJaccardSimilarity,
+  tokenize,
+  normalizeComplaintText,
+  extractIncidentLocations,
+  hasDirectIncidentContradiction,
+  COMPLAINT_STOP_WORDS,
+  type ExtractedIncidentLocations,
+} from "./clustering/similarity";
 export { searchCandidates } from "./clustering/candidate-search";
 
 /**

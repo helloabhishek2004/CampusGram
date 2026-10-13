@@ -18,12 +18,44 @@ function testRepository(): EmergencyRepository {
     created_at: new Date().toISOString(),
   }];
   const reports: EmergencyReport[] = [];
+  const history: import("@smart-campus/contracts").EmergencyReportHistoryView[] = [];
   const checkIns = new Map<string, "safe" | "need_help">();
   let sequence = 1;
 
   return {
     async listReports(identity, canViewAll) {
       return canViewAll ? reports : reports.filter((report) => report.reporter_id === identity.userId);
+    },
+    async getReport(reportId) {
+      return reports.find((report) => report.id === reportId) || null;
+    },
+    async updateReportStatus(reportId, targetStatus, expectedPreviousStatus, actor, note) {
+      const report = reports.find((r) => r.id === reportId);
+      if (!report) throw new Error("Emergency report not found.");
+      if (expectedPreviousStatus && report.status !== expectedPreviousStatus) {
+        throw new Error(`Conflict: Report status changed from '${expectedPreviousStatus}' to '${report.status}'.`);
+      }
+      const fromStatus = report.status;
+      report.status = targetStatus;
+      if (targetStatus === "resolved") {
+        report.resolved_at = new Date().toISOString();
+      }
+      if (actor) {
+        history.push({
+          id: `hist-${sequence++}`,
+          report_id: reportId,
+          from_status: fromStatus,
+          to_status: targetStatus,
+          actor_id: actor.userId,
+          actor_name: actor.fullName,
+          note,
+          created_at: new Date().toISOString(),
+        });
+      }
+      return report;
+    },
+    async getReportHistory(reportId) {
+      return history.filter((h) => h.report_id === reportId);
     },
     async listAlerts() {
       return { alerts, active: alerts.filter((alert) => alert.status === "sent") };
@@ -143,5 +175,102 @@ describe("Module 4: Emergency Alert System Service", () => {
     await expect(emergencyService.recordSafetyCheckIn({
       alert_id: "missing-alert", status: "safe",
     }, identity)).rejects.toThrow("Active emergency alert not found");
+  });
+
+  it("handles valid responder lifecycle transitions from submitted to resolved", async () => {
+    const report = await emergencyService.createReport({
+      type: "accident",
+      location_name: "Workshop Gate",
+      description: "Minor bike slip",
+    }, identity);
+    expect(report.status).toBe("submitted");
+
+    // 1. submitted -> acknowledged
+    const ack = await emergencyService.updateReportStatus(report.id, "acknowledged", "submitted");
+    expect(ack.status).toBe("acknowledged");
+
+    // 2. acknowledged -> verifying
+    const verifying = await emergencyService.updateReportStatus(report.id, "verifying", "acknowledged");
+    expect(verifying.status).toBe("verifying");
+
+    // 3. verifying -> verified
+    const verified = await emergencyService.updateReportStatus(report.id, "verified", "verifying");
+    expect(verified.status).toBe("verified");
+
+    // 4. verified -> resolved
+    const resolved = await emergencyService.updateReportStatus(report.id, "resolved", "verified");
+    expect(resolved.status).toBe("resolved");
+    expect(resolved.resolved_at).toBeDefined();
+
+    // 5. Attempting to transition from terminal 'resolved' should fail
+    await expect(
+      emergencyService.updateReportStatus(report.id, "verifying")
+    ).rejects.toThrow("Invalid status transition from 'resolved' to 'verifying'");
+  });
+
+  it("rejects invalid lifecycle jumps (e.g. submitted directly to resolved)", async () => {
+    const report = await emergencyService.createReport({
+      type: "other",
+      location_name: "Hostel B",
+      description: "Power cut",
+    }, identity);
+    expect(report.status).toBe("submitted");
+
+    await expect(
+      emergencyService.updateReportStatus(report.id, "resolved")
+    ).rejects.toThrow("Invalid status transition from 'submitted' to 'resolved'");
+  });
+
+  it("detects and rejects conflicting previous status expectations", async () => {
+    const report = await emergencyService.createReport({
+      type: "medical",
+      location_name: "Gym",
+      description: "Sprained ankle",
+    }, identity);
+
+    await expect(
+      emergencyService.updateReportStatus(report.id, "acknowledged", "verified")
+    ).rejects.toThrow("Conflict: Report is currently 'submitted', but 'verified' was expected");
+  });
+
+  it("records chronological audit history entries for each successful lifecycle transition", async () => {
+    const report = await emergencyService.createReport({
+      type: "accident",
+      location_name: "Workshop Corridor",
+      description: "Minor equipment slip",
+    }, identity);
+    expect(report.status).toBe("submitted");
+
+    const actor = { userId: "responder-9", fullName: "Security Officer Patel" };
+
+    // 1. First transition with note: submitted -> verifying
+    await emergencyService.updateReportStatus(
+      report.id,
+      "verifying",
+      "submitted",
+      actor,
+      "Evacuated students from corridor"
+    );
+
+    // 2. Second transition: verifying -> verified
+    await emergencyService.updateReportStatus(
+      report.id,
+      "verified",
+      "verifying",
+      actor,
+      "Hazmat team on site"
+    );
+
+    const history = await emergencyService.getReportHistory(report.id);
+    expect(history).toHaveLength(2);
+    expect(history[0].from_status).toBe("submitted");
+    expect(history[0].to_status).toBe("verifying");
+    expect(history[0].actor_id).toBe("responder-9");
+    expect(history[0].actor_name).toBe("Security Officer Patel");
+    expect(history[0].note).toBe("Evacuated students from corridor");
+
+    expect(history[1].from_status).toBe("verifying");
+    expect(history[1].to_status).toBe("verified");
+    expect(history[1].note).toBe("Hazmat team on site");
   });
 });

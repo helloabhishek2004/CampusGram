@@ -47,15 +47,20 @@
 - **Features:** Multimodal matching engine (CLIP visual + MiniLM text embeddings), privacy filtering (concealing distinguishing marks from public view), fraud-resistant verification questions, physical custody handovers at Central Security Desk.
 
 ### Module 4: Emergency Alert System
-- **Routes:** `/emergency`, `/api/emergency/alerts`, `/api/emergency/reports`, `/api/emergency/check-in`
+- **Routes:** `/emergency`, `/api/emergency/alerts`, `/api/emergency/reports`, `/api/emergency/reports/[id]`, `/api/emergency/check-in`
 - **Ownership:** `packages/contracts/src/emergency.ts`, `apps/web/lib/emergency`, `apps/web/app/emergency`
 - **Features:**
   - One-tap SOS rapid triage (`fire`, `medical`, `security_threat`, `hazmat`, `building_problem`, `other`) with automatic rule priority scoring (P1-P4).
+  - Responder Lifecycle Management: State machine enforcing valid transitions (`submitted` -> `acknowledged`/`verifying`/`rejected`; `verifying` -> `verified`/`acknowledged`/`rejected`; `verified` -> `resolved`/`verifying`).
+  - Atomic Audit Trail: `emergency_report_history` table and `transition_emergency_report_status` PostgreSQL RPC with optimistic concurrency protection (`expected_previous_status`).
+  - Audience Visibility Filtering: `canViewEmergencyAlert` filters broadcasts so that campus-wide, audience-scoped, and responder-only alerts reach only the intended users.
+  - Safe Realtime Polling: `emergency-banner.tsx` with bounded interval polling (30s) + immediate visibility change refresh + in-flight deduplication.
   - Campus Broadcast Dispatch Console for authorized staff to broadcast `critical`, `warning`, or `advisory` alerts.
   - Multi-channel fan-out delivery simulation: In-App, Push Notifications, SMS blast, Campus PA siren.
   - Real-time global `EmergencyBanner` in `AppShell` with immediate action checklists and assembly points.
   - Interactive Safety Check-In (`I am Safe` vs `Need Assistance`).
   - 24/7 direct dial emergency hotlines directory.
+  - Live Supabase persistence: Direct connection to hosted Supabase instance (`public.emergency_reports`, `public.emergency_alerts`, `public.emergency_check_ins`).
 
 ---
 
@@ -173,3 +178,54 @@ Mock lookup → OTP send → OTP verify → session → My Reports API also pass
 
 Do not store or document credentials from `.env.local`; only record that the
 environment is configured. Keep all secrets private and uncommitted.
+
+---
+
+## 7. Current Emergency System Implementation Memory — 2026-10-13
+
+### Current Status
+- Working branches: `feature/emergency-system`, lifecycle and audit trail hardening.
+- Web app: `http://localhost:3000` (Next.js 15 App Router).
+- Hosted Supabase authority: Configured via `.env.local` (`NEXT_PUBLIC_SUPABASE_URL`, `NEXT_PUBLIC_SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_ROLE_KEY`).
+- Live database persistence verified on `public.emergency_reports`, `public.emergency_alerts`, and `public.emergency_check_ins`.
+- Test suites: **36 passing tests** across `emergency.test.ts`, `emergency-permissions.test.ts`, `emergency-polling.test.ts`, and `emergency-reports-lifecycle.test.ts`.
+
+### Architecture & Workflows
+1. **Safe Realtime Delivery (Phase 1):**
+   - In-app `EmergencyBanner` queries active broadcasts with bounded 30s background polling, visibility change listening (immediate tab refetch), and in-flight request deduplication.
+   - External delivery (SMS, Push, Siren) remains strictly identified as simulated in API responses and UI indicators.
+2. **Responder Lifecycle Management (Phase 2):**
+   - Lifecycle state machine: `submitted` -> `acknowledged` / `verifying` / `rejected`; `verifying` -> `verified` / `acknowledged` / `rejected`; `verified` -> `resolved` / `verifying`.
+   - Transitions guarded by server authorization (`canManageEmergencyReports`). Non-staff roles receive 403.
+   - Dynamic UI in `/emergency` allows authorized responders to inspect reports, acknowledge, verify, resolve, or reject with optional notes.
+   - Concurrency conflicts handled with 409 when `expected_previous_status` does not match the current report state.
+3. **Atomic Audit Trail & Security (Phase 3 & 3.1):**
+   - Migration `018_emergency_report_history.sql`: Table `public.emergency_report_history` with foreign key cascade to `emergency_reports`.
+   - Transactional PostgreSQL RPC `transition_emergency_report_status`: Locks row `FOR UPDATE`, validates status transition, checks expected status, updates `status`, `updated_at`, `resolved_at`, and writes audit record in a single atomic transaction.
+   - RPC execution restricted exclusively to `service_role`.
+   - In-memory repository handles fallback during test runs without live PostgreSQL connections while mirroring identical contract semantics.
+4. **Audience Filtering:**
+   - Broadcasts filtered via `canViewEmergencyAlert` by scope: `campus_wide` (all authenticated users), role/department-specific scopes, and `responders_only`.
+   - Prevents sensitive emergency operational broadcasts from being broadcast to unselected or unauthorized student audiences.
+
+
+---
+
+## 8. Legal and Informational Pages Implementation — 2026-10-13
+
+### Implemented Routes
+- `/privacy` — Privacy Policy grounded in actual codebase data practices (institutional biodata, simulated OTP, masked phone numbers, zero raw credentials in client, privacy filtering for Lost & Found items concealing distinguishing marks).
+- `/terms` — Terms of Service detailing acceptable use across social feeds, complaint redressal, lost & found custody claims, and life-safety SOS reporting.
+- `/help` — Help & Support directory detailing modules, practical workflows, escalation contacts, and institutional emergency helplines.
+- `/about` — About CampusGram overview of the monorepo architecture, design principles, module owners, and institutional vision.
+
+### Technical & UI Design Foundations
+- Wrapped in `PublicInfoShell` (`apps/web/components/layout/public-info-shell.tsx`) to allow public unauthenticated reading while seamlessly displaying "Back to Workspace" / "Open App" when an authenticated session exists.
+- Strictly adheres to the dark zinc monochrome palette (`bg-zinc-950`, `border-zinc-800`, `text-zinc-100`, `text-zinc-400`, `bg-zinc-900/60`), zero emojis, and Lucide icons.
+- Integrated into:
+  - Sidebar Account navigation (`apps/web/components/layout/sidebar.tsx`)
+  - Command Palette Spotlight (`apps/web/components/layout/command-palette.tsx`)
+  - Desktop TopBar breadcrumb labels (`apps/web/components/layout/topbar.tsx`)
+  - Login page footer links (`apps/web/app/login/page.tsx`)
+  - Settings page legal links (`apps/web/app/settings/page.tsx`)
+- Verified via `pnpm test` (**419 tests passing**), `pnpm typecheck` (zero TypeScript errors), and `next build` (all 4 routes statically prerendered).
