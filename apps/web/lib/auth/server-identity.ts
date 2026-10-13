@@ -43,10 +43,11 @@ export async function resolveServerIdentity(
       !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.includes("placeholder"),
   );
 
-  // Explicit mock mode (or an unconfigured isolated test runner) is
+  // Explicit mock/demo mode (or an unconfigured isolated test runner) is
   // application-session-only. In particular, a stale or conflicting
   // Supabase browser session must never win over the mock cookie.
   const mockMode =
+    process.env.CAMPUSGRAM_DEMO_MODE === "true" ||
     process.env.AUTH_MODE === "mock" ||
     (process.env.NODE_ENV === "test" && !configured);
   if (mockMode) {

@@ -200,6 +200,24 @@ export async function listUserDocuments(
   userId: string,
   options?: { category?: string; query?: string }
 ): Promise<CampusDocument[]> {
+  if (process.env.CAMPUSGRAM_DEMO_MODE === "true") {
+    let demoDocs = [
+      ...IN_MEMORY_UPLOADED_DOCUMENTS.filter(
+        (d) => !d.ownerProfileId || d.ownerProfileId === userId
+      ),
+      ...MOCK_ACADEMIC_DOCUMENTS,
+      ...MOCK_NON_ACADEMIC_DOCUMENTS,
+    ];
+    if (options?.category && options.category !== "all") {
+      demoDocs = demoDocs.filter((d) => d.category === options.category);
+    }
+    if (options?.query) {
+      const q = options.query.toLowerCase();
+      demoDocs = demoDocs.filter((d) => d.title.toLowerCase().includes(q) || d.description.toLowerCase().includes(q));
+    }
+    return demoDocs;
+  }
+
   let docs: CampusDocument[] = [];
 
   try {
@@ -405,6 +423,12 @@ export async function createDocument(
     createdAt: now.toISOString(),
     updatedAt: now.toISOString(),
   };
+
+  // In demo mode or if Supabase is offline, save to in-memory store
+  if (process.env.CAMPUSGRAM_DEMO_MODE === "true") {
+    IN_MEMORY_UPLOADED_DOCUMENTS.unshift(newDoc);
+    return newDoc;
+  }
 
   // Try persisting to Supabase if available
   try {

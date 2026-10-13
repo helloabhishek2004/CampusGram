@@ -9,13 +9,17 @@ type LoadedClaim = { claim: Record<string, any>; item?: ItemRow; lost?: ItemRow;
 const activeClaimStatuses = ["pending", "questions_pending", "approved", "handover"];
 
 const configured = () => Boolean(
+  process.env.CAMPUSGRAM_DEMO_MODE !== "true" &&
   process.env.NEXT_PUBLIC_SUPABASE_URL &&
   process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY &&
   !process.env.NEXT_PUBLIC_SUPABASE_URL.includes("placeholder") &&
   !process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY.includes("placeholder"),
 );
 
-const mock = () => process.env.NODE_ENV === "test" || (!configured() && process.env.AUTH_MODE === "mock");
+const mock = () =>
+  process.env.CAMPUSGRAM_DEMO_MODE === "true" ||
+  process.env.NODE_ENV === "test" ||
+  (!configured() && process.env.AUTH_MODE === "mock");
 
 function assertMode() {
   if (!configured() && !mock()) {

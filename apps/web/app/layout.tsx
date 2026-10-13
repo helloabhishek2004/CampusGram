@@ -3,6 +3,7 @@ import "../styles/globals.css";
 import { AuthProvider } from "@/components/auth/auth-guard";
 import { ThemeProvider } from "@/components/theme/theme-context";
 import { SidebarProvider } from "@/components/layout/sidebar-context";
+import { PortfolioDemoNotice } from "@/components/demo/portfolio-demo-notice";
 
 export const viewport: Viewport = {
   width: "device-width",
@@ -94,6 +95,7 @@ export default function RootLayout({
             <SidebarProvider>{children}</SidebarProvider>
           </AuthProvider>
         </ThemeProvider>
+        <PortfolioDemoNotice />
       </body>
     </html>
   );

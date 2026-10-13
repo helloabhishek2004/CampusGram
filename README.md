@@ -78,6 +78,63 @@ Module 2 supports two operational modes:
 
 ---
 
+## 🎭 Portfolio Demo Mode & Open-Source Showcase
+
+CampusGram includes an explicit **Portfolio Demo Mode** designed for public open-source showcases (e.g. hosted on Vercel).
+
+### What is Demo Mode?
+When `CAMPUSGRAM_DEMO_MODE=true` is set:
+- **Zero Live Database Operations:** All API handlers route directly to realistic in-memory stores and seed catalogs.
+- **Service Isolation:** Bypasses live Supabase tables, remote Gemini calls, Python FastAPI microservices, and `pg-boss` queues.
+- **In-Memory File Attachments:** Simulated in-memory token uploads replace local disk filesystem writes (`node:fs`), allowing serverless deployments without `ENOENT` / `EROFS` crashes.
+- **Life-Safety Simulation:** Emergency SOS reports, drills, and broadcasts remain strictly simulated and never trigger external SMS/Push alerts.
+- **Fictional Personas:** Visitors can log in using pre-seeded test roll numbers (e.g., `STU2026001`, `FAC2026001`) with dummy OTP `123456`.
+- **Persistent Notice:** Displays an accessible, discreet disclaimer badge with a direct link back to the verified GitHub repository: [https://github.com/helloabhishek2004/campus-hackthon](https://github.com/helloabhishek2004/campus-hackthon).
+
+### Enabling Demo Mode Locally
+Add to your `.env.local`:
+```bash
+CAMPUSGRAM_DEMO_MODE=true
+NEXT_PUBLIC_CAMPUSGRAM_DEMO_MODE=true
+AI_PROVIDER=mock
+OTP_PROVIDER=mock
+AUTH_MODE=mock
+```
+
+---
+
+## ☁️ Public Vercel Demo Deployment Guide
+
+To deploy this repository as a 100% free public interactive showcase on Vercel:
+
+1. **Import Repository:** Connect [https://github.com/helloabhishek2004/campus-hackthon](https://github.com/helloabhishek2004/campus-hackthon) in your Vercel Dashboard.
+2. **Configure Monorepo Settings:**
+   - **Root Directory:** `apps/web`
+   - **Framework Preset:** `Next.js`
+   - **Build Command:** `pnpm build` (or left default)
+3. **Set Environment Variables on Vercel:**
+   | Variable | Value | Public / Secret |
+   | :--- | :--- | :--- |
+   | `CAMPUSGRAM_DEMO_MODE` | `true` | Server Configuration |
+   | `NEXT_PUBLIC_CAMPUSGRAM_DEMO_MODE` | `true` | Public Safe Boolean |
+   | `AI_PROVIDER` | `mock` | Server Configuration |
+   | `OTP_PROVIDER` | `mock` | Server Configuration |
+   | `AUTH_MODE` | `mock` | Server Configuration |
+   | `NEXT_PUBLIC_AUTH_MODE` | `mock` | Public Safe Boolean |
+   | `AUTH_SESSION_SECRET` | *32+ random hex characters* | Server Secret |
+   | `COMPLAINT_ATTACHMENT_TOKEN_SECRET` | *32+ random hex characters* | Server Secret |
+   | `NEXT_PUBLIC_APP_URL` | `https://your-app.vercel.app` | Public App URL |
+4. **Deploy:** Click **Deploy**. Vercel will prerender all static and dynamic pages with zero backend dependencies.
+
+---
+
+## 📜 Licensing Notice
+
+- **Repository Status:** Open-source showcase.
+- **License File:** A formal `LICENSE` file (such as MIT or Apache 2.0) has not yet been selected by the repository owner. Please consult with the author before commercial distribution or proprietary relicensing.
+
+---
+
 ## 📖 Key Documentation
 
 - [AGENTS.md](./AGENTS.md): Essential reading for AI agents and human contributors.

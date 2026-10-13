@@ -104,6 +104,7 @@ export class ComplaintLifecycleError extends Error {
 }
 
 function isSupabaseConfigured(): boolean {
+  if (process.env.CAMPUSGRAM_DEMO_MODE === "true") return false;
   if (process.env.NODE_ENV === "test") return false;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY;

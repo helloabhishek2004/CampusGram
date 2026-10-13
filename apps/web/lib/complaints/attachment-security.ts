@@ -10,6 +10,9 @@ import { constants } from "node:fs";
 import { mkdir, open, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
 import type { ComplaintAttachment } from "@smart-campus/contracts";
+import { isDemoMode } from "../demo/demo-mode";
+
+const demoMemoryAttachments = new Map<string, { buffer: Buffer; mimeType: string; size: number }>();
 
 export const COMPLAINT_ATTACHMENT_UPLOAD_DIR = path.join(
   process.cwd(),
@@ -266,6 +269,17 @@ export async function readComplaintAttachment(
     );
   }
 
+  if (isDemoMode()) {
+    const memoryRecord = demoMemoryAttachments.get(payload.attachmentId);
+    if (!memoryRecord) {
+      throw new ComplaintAttachmentSecurityError(
+        "The referenced complaint attachment is unavailable.",
+        "ATTACHMENT_NOT_FOUND",
+      );
+    }
+    return { buffer: memoryRecord.buffer, mimeType: payload.mimeType };
+  }
+
   try {
     // Never follow a file symlink outside the private upload directory.
     const file = await open(filePath, constants.O_RDONLY | constants.O_NOFOLLOW);
@@ -329,6 +343,22 @@ export async function validateComplaintAttachmentReference(
     );
   }
 
+  if (isDemoMode()) {
+    const memoryRecord = demoMemoryAttachments.get(payload.attachmentId);
+    if (!memoryRecord) {
+      throw new ComplaintAttachmentSecurityError(
+        "The referenced complaint attachment no longer exists.",
+        "ATTACHMENT_NOT_FOUND",
+      );
+    }
+    return {
+      ...attachment,
+      id: payload.attachmentId,
+      url: attachment.url,
+      mime_type: payload.mimeType,
+    };
+  }
+
   let fileStat;
   try {
     fileStat = await stat(filePath);
@@ -383,6 +413,22 @@ export async function storeComplaintImage(input: {
     ownerId: input.ownerId,
     mimeType: detected.mimeType,
   });
+
+  if (isDemoMode()) {
+    demoMemoryAttachments.set(issued.payload.attachmentId, {
+      buffer: input.buffer,
+      mimeType: detected.mimeType,
+      size: input.buffer.length,
+    });
+    return {
+      id: issued.payload.attachmentId,
+      url: `/uploads/complaints/${issued.token}.${detected.extension}`,
+      filename: input.originalFilename || `${issued.payload.attachmentId}.${detected.extension}`,
+      mime_type: detected.mimeType,
+      size_bytes: input.buffer.length,
+    } satisfies ComplaintAttachment;
+  }
+
   const filePath = attachmentFilePath(issued.token, detected.extension);
   await mkdir(COMPLAINT_ATTACHMENT_UPLOAD_DIR, { recursive: true });
   await writeFile(filePath, input.buffer, { flag: "wx" });

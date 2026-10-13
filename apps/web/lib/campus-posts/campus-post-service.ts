@@ -82,8 +82,9 @@ export interface FeedPageResult {
   count: number;
 }
 
-/** The in-memory store is reserved for explicit mock mode or a genuinely absent Supabase setup. */
+/** The in-memory store is reserved for explicit mock mode, demo mode, or a genuinely absent Supabase setup. */
 function isInMemoryStore(): boolean {
+  if (process.env.CAMPUSGRAM_DEMO_MODE === "true") return true;
   if (process.env.NODE_ENV === "test") return true;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   const key = process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY?.trim();

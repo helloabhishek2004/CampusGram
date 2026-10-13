@@ -40,9 +40,11 @@ export async function POST(req: NextRequest) {
       return NextResponse.json(errorResponse, { status: 400 });
     }
 
-    // Call Module 2 intelligence processor
+    // Call Module 2 intelligence processor (force mock in demo mode)
+    const forceMock = process.env.CAMPUSGRAM_DEMO_MODE === "true";
     const response: ComplaintAnalysisResponse = await analyzeComplaint(
       parsed.data,
+      forceMock ? { provider: "mock" } : undefined,
     );
 
     return NextResponse.json(response, {

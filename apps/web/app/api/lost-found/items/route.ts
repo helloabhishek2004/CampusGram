@@ -77,19 +77,21 @@ export async function POST(req: NextRequest) {
         images,
     });
 
-    try {
-        const queue = await getQueue();
-        await queue.send('process-item', {
-            itemId: result.row.id,
-            type: result.row.type,
-            title: result.row.title,
-            description: result.row.private_description || result.row.public_description,
-            imageUrls: images.map((i: any) => i.public_url) // passing base64 strings
-        });
-    } catch (error) {
-        // The item is already durably recorded. Keep it in `processing` and
-        // surface the processing limitation rather than falling back to JSON.
-        console.error("Lost & Found processing could not be queued:", error);
+    if (process.env.CAMPUSGRAM_DEMO_MODE !== "true") {
+      try {
+          const queue = await getQueue();
+          await queue.send('process-item', {
+              itemId: result.row.id,
+              type: result.row.type,
+              title: result.row.title,
+              description: result.row.private_description || result.row.public_description,
+              imageUrls: images.map((i: any) => i.public_url) // passing base64 strings
+          });
+      } catch (error) {
+          // The item is already durably recorded. Keep it in `processing` and
+          // surface the processing limitation rather than falling back to JSON.
+          console.error("Lost & Found processing could not be queued:", error);
+      }
     }
 
      return NextResponse.json({ success: true, item: result.public }, { status: 201 });

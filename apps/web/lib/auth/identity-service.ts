@@ -64,9 +64,11 @@ export async function findInstitutionalRecord(
     if (directoryConfigured) return null;
   }
 
-  // 2. Deterministic directory fallback is explicitly test/offline-only. A
-  // configured database outage must not silently turn into a mock identity.
-  const mockMode = process.env.AUTH_MODE === "mock" || process.env.NODE_ENV === "test";
+  // 2. Deterministic directory fallback is explicitly test/offline/demo-only.
+  const mockMode =
+    process.env.CAMPUSGRAM_DEMO_MODE === "true" ||
+    process.env.AUTH_MODE === "mock" ||
+    process.env.NODE_ENV === "test";
   if (!mockMode || directoryConfigured) return null;
 
   const mockMatch = MOCK_INSTITUTIONAL_DIRECTORY.find(
@@ -85,6 +87,7 @@ export async function findInstitutionalRecord(
 }
 
 function isInstitutionalDirectoryConfigured(): boolean {
+  if (process.env.CAMPUSGRAM_DEMO_MODE === "true") return false;
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL?.trim();
   return Boolean(url && !url.includes("placeholder"));
 }
